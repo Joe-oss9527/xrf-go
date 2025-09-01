@@ -64,7 +64,9 @@ func TestIsCaddyInstalled(t *testing.T) {
 
 	// 测试存在但不可执行的文件
 	tmpFile := filepath.Join(t.TempDir(), "fake-caddy")
-	os.WriteFile(tmpFile, []byte("fake caddy"), 0644)
+	if err := os.WriteFile(tmpFile, []byte("fake caddy"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	manager.SetBinaryPath(tmpFile)
 
 	// 应该返回 false 因为不是真正的 caddy 二进制文件

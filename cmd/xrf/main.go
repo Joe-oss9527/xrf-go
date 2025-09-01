@@ -218,7 +218,7 @@ func createInstallCommand() *cobra.Command {
 			// 安装 Xray
 			utils.PrintInfo("正在安装 Xray...")
 			if err := installer.InstallXray(); err != nil {
-				return fmt.Errorf("Xray 安装失败: %w", err)
+				return fmt.Errorf("xray 安装失败: %w", err)
 			}
 
 			// 安装并启动服务
@@ -421,11 +421,14 @@ func createListCommand() *cobra.Command {
 			}
 
 			for _, protocol := range protocols {
-				status := "运行中"
-				if protocol.Status == "stopped" {
+				var status string
+				switch protocol.Status {
+				case "stopped":
 					status = "已停止"
-				} else if protocol.Status == "unknown" {
+				case "unknown":
 					status = "未知"
+				default:
+					status = "运行中"
 				}
 
 				utils.PrintProtocolInfo(
@@ -1873,9 +1876,8 @@ func cleanLogs() error {
 	}
 
 	for _, path := range logPaths {
-		if err := exec.Command("sh", "-c", fmt.Sprintf("rm -f %s", path)).Run(); err != nil {
-			// Continue even if some files can't be deleted
-		}
+		_ = exec.Command("sh", "-c", fmt.Sprintf("rm -f %s", path)).Run()
+		// Continue even if some files can't be deleted
 	}
 
 	return nil
@@ -1889,9 +1891,8 @@ func cleanBackupConfigs() error {
 	}
 
 	for _, path := range backupPaths {
-		if err := exec.Command("sh", "-c", fmt.Sprintf("rm -f %s", path)).Run(); err != nil {
-			// Continue even if some files can't be deleted
-		}
+		_ = exec.Command("sh", "-c", fmt.Sprintf("rm -f %s", path)).Run()
+		// Continue even if some files can't be deleted
 	}
 
 	return nil
@@ -1905,9 +1906,8 @@ func cleanTempFiles() error {
 	}
 
 	for _, path := range tempPaths {
-		if err := exec.Command("sh", "-c", fmt.Sprintf("rm -rf %s", path)).Run(); err != nil {
-			// Continue even if some files can't be deleted
-		}
+		_ = exec.Command("sh", "-c", fmt.Sprintf("rm -rf %s", path)).Run()
+		// Continue even if some files can't be deleted
 	}
 
 	return nil

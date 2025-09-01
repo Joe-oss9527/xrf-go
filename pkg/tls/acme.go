@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -150,7 +149,7 @@ func (am *ACMEManager) getOrCreateUser() (*ACMEUser, error) {
 
 // loadUser 从文件加载用户账户
 func (am *ACMEManager) loadUser(accountPath string) (*ACMEUser, error) {
-	data, err := ioutil.ReadFile(accountPath)
+	data, err := os.ReadFile(accountPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read account file: %w", err)
 	}
@@ -236,7 +235,7 @@ func (am *ACMEManager) saveUser(user *ACMEUser, accountPath string) error {
 		return fmt.Errorf("failed to marshal account: %w", err)
 	}
 
-	if err := ioutil.WriteFile(accountPath, data, 0600); err != nil {
+	if err := os.WriteFile(accountPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write account file: %w", err)
 	}
 
@@ -249,12 +248,12 @@ func (am *ACMEManager) saveCertificate(domain string, cert, key []byte) error {
 	keyPath := filepath.Join(am.certDir, domain+".key")
 
 	// 保存证书文件
-	if err := ioutil.WriteFile(certPath, cert, 0644); err != nil {
+	if err := os.WriteFile(certPath, cert, 0644); err != nil {
 		return fmt.Errorf("failed to save certificate: %w", err)
 	}
 
 	// 保存私钥文件
-	if err := ioutil.WriteFile(keyPath, key, 0600); err != nil {
+	if err := os.WriteFile(keyPath, key, 0600); err != nil {
 		return fmt.Errorf("failed to save private key: %w", err)
 	}
 
@@ -315,12 +314,12 @@ func (am *ACMEManager) RenewCertificate(domain string) error {
 	}
 
 	// 读取现有证书
-	certPEM, err := ioutil.ReadFile(certPath)
+	certPEM, err := os.ReadFile(certPath)
 	if err != nil {
 		return fmt.Errorf("failed to read certificate: %w", err)
 	}
 
-	keyPEM, err := ioutil.ReadFile(keyPath)
+	keyPEM, err := os.ReadFile(keyPath)
 	if err != nil {
 		return fmt.Errorf("failed to read private key: %w", err)
 	}
@@ -354,7 +353,7 @@ func (am *ACMEManager) CheckAndRenew() error {
 		return fmt.Errorf("certificate directory not set")
 	}
 
-	files, err := ioutil.ReadDir(am.certDir)
+	files, err := os.ReadDir(am.certDir)
 	if err != nil {
 		return fmt.Errorf("failed to read certificate directory: %w", err)
 	}
@@ -389,7 +388,7 @@ func (am *ACMEManager) CheckAndRenew() error {
 
 // checkCertificateExpiry 检查证书是否即将过期
 func (am *ACMEManager) checkCertificateExpiry(certPath string, threshold time.Duration) (bool, error) {
-	certPEM, err := ioutil.ReadFile(certPath)
+	certPEM, err := os.ReadFile(certPath)
 	if err != nil {
 		return false, err
 	}
@@ -399,7 +398,7 @@ func (am *ACMEManager) checkCertificateExpiry(certPath string, threshold time.Du
 		return false, err
 	}
 
-	timeUntilExpiry := cert.NotAfter.Sub(time.Now())
+	timeUntilExpiry := time.Until(cert.NotAfter)
 	return timeUntilExpiry <= threshold, nil
 }
 

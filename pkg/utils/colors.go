@@ -54,18 +54,21 @@ func PrintKeyValue(key, value string) {
 }
 
 func PrintProtocolInfo(name, tag, port, status string) {
-	statusColor := Green
-	if status == "stopped" {
-		statusColor = Red
-	} else if status == "unknown" {
-		statusColor = Yellow
+	var statusText string
+	switch status {
+	case "stopped":
+		statusText = Red(status)
+	case "unknown":
+		statusText = Yellow(status)
+	default:
+		statusText = Green(status)
 	}
 
 	fmt.Printf("  %s %s [%s] %s\n",
 		BoldCyan("•"),
 		BoldWhite(name),
 		Yellow("Port: "+port),
-		statusColor(status))
+		statusText)
 
 	if tag != "" {
 		fmt.Printf("    Tag: %s\n", tag)

@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -116,7 +115,7 @@ func (cm *ConfigManager) createBaseConfigs() error {
 			return fmt.Errorf("failed to render template for %s: %w", config.filename, err)
 		}
 
-		if err := ioutil.WriteFile(configPath, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 			return fmt.Errorf("failed to write config file %s: %w", config.filename, err)
 		}
 
@@ -192,7 +191,7 @@ func (cm *ConfigManager) AddProtocol(protocolType, tag string, options map[strin
 	configPath := filepath.Join(cm.confDir, filename)
 
 	// 写入配置文件
-	if err := ioutil.WriteFile(configPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		rollback()
 		return fmt.Errorf("failed to write protocol config: %w", err)
 	}
@@ -353,7 +352,7 @@ func (cm *ConfigManager) UpdateProtocol(tag string, options map[string]interface
 		return fmt.Errorf("failed to marshal updated config: %w", err)
 	}
 
-	if err := ioutil.WriteFile(configFile.Path, updatedContent, 0644); err != nil {
+	if err := os.WriteFile(configFile.Path, updatedContent, 0644); err != nil {
 		rollback()
 		return fmt.Errorf("failed to write updated config: %w", err)
 	}
@@ -544,7 +543,10 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 func (cm *ConfigManager) BackupConfig(backupPath string) error {
 	if backupPath == "" {
 		// 生成默认备份路径
-		backupPath = fmt.Sprintf("xrf-backup-%s.tar.gz", strings.ReplaceAll(strings.Replace(utils.GetCurrentTime(), " ", "_", -1), ":", "-"))
+		timestamp := utils.GetCurrentTime()
+		timestamp = strings.ReplaceAll(timestamp, " ", "_")
+		timestamp = strings.ReplaceAll(timestamp, ":", "-")
+		backupPath = fmt.Sprintf("xrf-backup-%s.tar.gz", timestamp)
 	}
 
 	// 检查配置目录是否存在
@@ -553,7 +555,7 @@ func (cm *ConfigManager) BackupConfig(backupPath string) error {
 	}
 
 	// 创建临时目录
-	tempDir, err := ioutil.TempDir("", "xrf-backup-*")
+	tempDir, err := os.MkdirTemp("", "xrf-backup-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
@@ -582,7 +584,7 @@ func (cm *ConfigManager) BackupConfig(backupPath string) error {
 	// 写入备份信息
 	infoPath := filepath.Join(tempDir, "backup-info.json")
 	infoBytes, _ := json.MarshalIndent(backupInfo, "", "  ")
-	if err := ioutil.WriteFile(infoPath, infoBytes, 0644); err != nil {
+	if err := os.WriteFile(infoPath, infoBytes, 0644); err != nil {
 		return fmt.Errorf("failed to write backup info: %w", err)
 	}
 
@@ -613,7 +615,7 @@ func (cm *ConfigManager) RestoreConfig(backupPath string) error {
 	}
 
 	// 创建临时目录
-	tempDir, err := ioutil.TempDir("", "xrf-restore-*")
+	tempDir, err := os.MkdirTemp("", "xrf-restore-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
@@ -626,7 +628,7 @@ func (cm *ConfigManager) RestoreConfig(backupPath string) error {
 
 	// 读取备份信息
 	infoPath := filepath.Join(tempDir, "backup-info.json")
-	infoBytes, err := ioutil.ReadFile(infoPath)
+	infoBytes, err := os.ReadFile(infoPath)
 	if err != nil {
 		return fmt.Errorf("failed to read backup info: %w", err)
 	}
@@ -637,8 +639,10 @@ func (cm *ConfigManager) RestoreConfig(backupPath string) error {
 	}
 
 	// 备份当前配置（以防恢复失败）
-	currentBackupPath := fmt.Sprintf("xrf-current-backup-%s.tar.gz",
-		strings.ReplaceAll(strings.Replace(utils.GetCurrentTime(), " ", "_", -1), ":", "-"))
+	timestamp := utils.GetCurrentTime()
+	timestamp = strings.ReplaceAll(timestamp, " ", "_")
+	timestamp = strings.ReplaceAll(timestamp, ":", "-")
+	currentBackupPath := fmt.Sprintf("xrf-current-backup-%s.tar.gz", timestamp)
 
 	utils.Info("Creating backup of current configuration...")
 	if err := cm.BackupConfig(currentBackupPath); err != nil {
@@ -916,7 +920,7 @@ func (cm *ConfigManager) getConfigPriority(configType, name string) int {
 
 // 列出配置文件
 func (cm *ConfigManager) listConfigFiles() ([]ConfigFile, error) {
-	files, err := ioutil.ReadDir(cm.confDir)
+	files, err := os.ReadDir(cm.confDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config directory: %w", err)
 	}
@@ -1025,7 +1029,7 @@ func (cm *ConfigManager) configContainsTag(config map[string]interface{}, tag st
 
 // 读取配置文件
 func (cm *ConfigManager) readConfigFile(path string) (map[string]interface{}, error) {
-	content, err := ioutil.ReadFile(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
@@ -1108,27 +1112,28 @@ func (cm *ConfigManager) GetProtocolInfo(tag string) (ProtocolInfo, error) {
 func (cm *ConfigManager) mergeConfigOptions(config map[string]interface{}, options map[string]interface{}) error {
 	// 递归合并配置
 	for key, newValue := range options {
-		if key == "port" {
+		switch key {
+		case "port":
 			// 更新入站端口
 			if err := cm.updateInboundPort(config, newValue); err != nil {
 				return err
 			}
-		} else if key == "password" {
+		case "password":
 			// 更新密码
 			if err := cm.updatePassword(config, newValue); err != nil {
 				return err
 			}
-		} else if key == "uuid" {
+		case "uuid":
 			// 更新 UUID
 			if err := cm.updateUUID(config, newValue); err != nil {
 				return err
 			}
-		} else if key == "path" {
+		case "path":
 			// 更新路径
 			if err := cm.updateTransportPath(config, newValue); err != nil {
 				return err
 			}
-		} else {
+		default:
 			// 其他简单键值对直接更新
 			config[key] = newValue
 		}
@@ -1294,7 +1299,9 @@ func (cm *ConfigManager) updateTransportPath(config map[string]interface{}, path
 
 // createAutoBackup creates an automatic backup before configuration changes
 func (cm *ConfigManager) createAutoBackup(operation string) (string, error) {
-	timestamp := strings.ReplaceAll(strings.Replace(utils.GetCurrentTime(), " ", "_", -1), ":", "-")
+	timestamp := utils.GetCurrentTime()
+	timestamp = strings.ReplaceAll(timestamp, " ", "_")
+	timestamp = strings.ReplaceAll(timestamp, ":", "-")
 	backupPath := fmt.Sprintf("/tmp/xrf-auto-backup-%s-%s.tar.gz", operation, timestamp)
 
 	if err := cm.BackupConfig(backupPath); err != nil {
@@ -1311,8 +1318,8 @@ func (cm *ConfigManager) restoreFromBackup(backupPath string) error {
 
 // validateConfigAfterChange validates configuration after making changes
 func (cm *ConfigManager) validateConfigAfterChange() error {
-	// Use xray test command to validate configuration
-	cmd := exec.Command("xray", "test", "-confdir", cm.confDir)
+	// Use xray run -test command to validate configuration
+	cmd := exec.Command("xray", "run", "-test", "-confdir", cm.confDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("configuration validation failed: %s", string(output))

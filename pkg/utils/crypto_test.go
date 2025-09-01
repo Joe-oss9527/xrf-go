@@ -186,7 +186,7 @@ func TestShortID(t *testing.T) {
 
 		// 验证是否是有效的十六进制
 		for _, char := range shortID {
-			if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+			if (char < '0' || char > '9') && (char < 'a' || char > 'f') && (char < 'A' || char > 'F') {
 				t.Errorf("Short ID contains invalid hex character: %c", char)
 			}
 		}
@@ -252,7 +252,9 @@ func TestCryptoPerformance(t *testing.T) {
 		count := 100
 
 		for i := 0; i < count; i++ {
-			GenerateX25519KeyPair()
+			if _, _, err := GenerateX25519KeyPair(); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		t.Logf("Generated %d X25519 key pairs", count)

@@ -343,7 +343,7 @@ func (i *Installer) IsInstalled() bool {
 // GetInstalledVersion 获取已安装的版本
 func (i *Installer) GetInstalledVersion() (string, error) {
 	if !i.IsInstalled() {
-		return "", fmt.Errorf("Xray 未安装")
+		return "", fmt.Errorf("xray 未安装")
 	}
 
 	// 执行 xray version 命令获取版本

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -53,12 +52,8 @@ func NewAPIClient(address string) *APIClient {
 
 // Connect establishes connection to Xray API server
 func (c *APIClient) Connect() error {
-	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
-	defer cancel()
-
-	conn, err := grpc.DialContext(ctx, c.address,
+	conn, err := grpc.NewClient(c.address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Xray API at %s: %w", c.address, err)
