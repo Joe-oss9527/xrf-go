@@ -126,11 +126,30 @@ func (cm *ConfigManager) createBaseConfigs() error {
 	return nil
 }
 
-// AddProtocol 添加协议配置
+// AddProtocol 添加协议配置 (Enhanced with DESIGN.md rollback requirement)
 func (cm *ConfigManager) AddProtocol(protocolType, tag string, options map[string]interface{}) error {
+	// DESIGN.md requirement (line 575): 操作失败自动回滚
+	// Create automatic backup before changes
+	backupPath, err := cm.createAutoBackup("add-protocol-" + tag)
+	if err != nil {
+		utils.Warning("Failed to create backup before adding protocol: %v", err)
+	}
+
+	// Rollback function in case of failure
+	rollback := func() {
+		if backupPath != "" {
+			if rollbackErr := cm.restoreFromBackup(backupPath); rollbackErr != nil {
+				utils.Error("Failed to rollback after error: %v", rollbackErr)
+			} else {
+				utils.Info("Configuration rolled back due to failure")
+			}
+		}
+	}
+
 	// 检查标签是否已存在
-	_, err := cm.GetProtocolInfo(tag)
+	_, err = cm.GetProtocolInfo(tag)
 	if err == nil {
+		rollback()
 		return &utils.XRFError{
 			Type:    utils.ErrConfigConflict,
 			Message: fmt.Sprintf("协议标签 '%s' 已存在", tag),
@@ -143,24 +162,28 @@ func (cm *ConfigManager) AddProtocol(protocolType, tag string, options map[strin
 
 	protocol, err := cm.protocols.GetProtocol(protocolType)
 	if err != nil {
+		rollback()
 		return utils.NewProtocolNotSupportedError(protocolType)
 	}
 
 	// 生成模板数据
 	data, err := cm.generateTemplateData(protocol, tag, options)
 	if err != nil {
+		rollback()
 		return fmt.Errorf("failed to generate template data: %w", err)
 	}
 
 	// 获取协议模板
 	templateStr, exists := GetProtocolTemplate(protocol.Template)
 	if !exists {
+		rollback()
 		return fmt.Errorf("template not found for protocol: %s", protocol.Template)
 	}
 
 	// 渲染配置模板
 	content, err := cm.renderer.Render(templateStr, data)
 	if err != nil {
+		rollback()
 		return fmt.Errorf("failed to render protocol template: %w", err)
 	}
 
@@ -170,32 +193,83 @@ func (cm *ConfigManager) AddProtocol(protocolType, tag string, options map[strin
 
 	// 写入配置文件
 	if err := ioutil.WriteFile(configPath, []byte(content), 0644); err != nil {
+		rollback()
 		return fmt.Errorf("failed to write protocol config: %w", err)
+	}
+
+	// 验证配置是否有效
+	if err := cm.validateConfigAfterChange(); err != nil {
+		rollback()
+		return fmt.Errorf("configuration validation failed after adding protocol: %w", err)
+	}
+
+	// Success - cleanup backup
+	if backupPath != "" {
+		os.Remove(backupPath)
 	}
 
 	utils.Success("Added protocol %s with tag %s", protocol.Name, tag)
 	return nil
 }
 
-// RemoveProtocol 删除协议配置
+// RemoveProtocol 删除协议配置 (Enhanced with DESIGN.md rollback requirement)
 func (cm *ConfigManager) RemoveProtocol(tag string) error {
+	// DESIGN.md requirement (line 575): 操作失败自动回滚
+	// Create automatic backup before changes
+	backupPath, err := cm.createAutoBackup("remove-protocol-" + tag)
+	if err != nil {
+		utils.Warning("Failed to create backup before removing protocol: %v", err)
+	}
+
+	// Rollback function in case of failure
+	rollback := func() {
+		if backupPath != "" {
+			if rollbackErr := cm.restoreFromBackup(backupPath); rollbackErr != nil {
+				utils.Error("Failed to rollback after error: %v", rollbackErr)
+			} else {
+				utils.Info("Configuration rolled back due to failure")
+			}
+		}
+	}
+
 	// 查找包含该 tag 的配置文件
 	files, err := cm.findConfigFilesByTag(tag)
 	if err != nil {
+		rollback()
 		return err
 	}
 
 	if len(files) == 0 {
+		rollback()
 		return fmt.Errorf("protocol with tag '%s' not found", tag)
 	}
 
 	// 删除配置文件
+	var failedFiles []string
 	for _, file := range files {
 		if err := os.Remove(file.Path); err != nil {
+			failedFiles = append(failedFiles, file.Filename)
 			utils.Warning("Failed to remove config file %s: %v", file.Filename, err)
 		} else {
 			utils.Debug("Removed config file: %s", file.Filename)
 		}
+	}
+
+	// Check if any files failed to remove
+	if len(failedFiles) > 0 {
+		rollback()
+		return fmt.Errorf("failed to remove configuration files: %v", failedFiles)
+	}
+
+	// 验证配置是否有效
+	if err := cm.validateConfigAfterChange(); err != nil {
+		rollback()
+		return fmt.Errorf("configuration validation failed after removing protocol: %w", err)
+	}
+
+	// Success - cleanup backup
+	if backupPath != "" {
+		os.Remove(backupPath)
 	}
 
 	utils.Success("Removed protocol with tag %s", tag)
@@ -226,15 +300,35 @@ func (cm *ConfigManager) ListProtocols() ([]ProtocolInfo, error) {
 	return protocols, nil
 }
 
-// UpdateProtocol 更新协议配置
+// UpdateProtocol 更新协议配置 (Enhanced with DESIGN.md rollback requirement)
 func (cm *ConfigManager) UpdateProtocol(tag string, options map[string]interface{}) error {
+	// DESIGN.md requirement (line 575): 操作失败自动回滚
+	// Create automatic backup before changes
+	backupPath, err := cm.createAutoBackup("update-protocol-" + tag)
+	if err != nil {
+		utils.Warning("Failed to create backup before updating protocol: %v", err)
+	}
+
+	// Rollback function in case of failure
+	rollback := func() {
+		if backupPath != "" {
+			if rollbackErr := cm.restoreFromBackup(backupPath); rollbackErr != nil {
+				utils.Error("Failed to rollback after error: %v", rollbackErr)
+			} else {
+				utils.Info("Configuration rolled back due to failure")
+			}
+		}
+	}
+
 	// 查找现有配置
 	files, err := cm.findConfigFilesByTag(tag)
 	if err != nil {
+		rollback()
 		return err
 	}
 
 	if len(files) == 0 {
+		rollback()
 		return fmt.Errorf("protocol with tag '%s' not found", tag)
 	}
 
@@ -242,22 +336,37 @@ func (cm *ConfigManager) UpdateProtocol(tag string, options map[string]interface
 	configFile := files[0]
 	existingConfig, err := cm.readConfigFile(configFile.Path)
 	if err != nil {
+		rollback()
 		return err
 	}
 
 	// 更新配置
 	if err := cm.mergeConfigOptions(existingConfig, options); err != nil {
+		rollback()
 		return err
 	}
 
 	// 写回配置文件
 	updatedContent, err := json.MarshalIndent(existingConfig, "", "  ")
 	if err != nil {
+		rollback()
 		return fmt.Errorf("failed to marshal updated config: %w", err)
 	}
 
 	if err := ioutil.WriteFile(configFile.Path, updatedContent, 0644); err != nil {
+		rollback()
 		return fmt.Errorf("failed to write updated config: %w", err)
+	}
+
+	// 验证配置是否有效
+	if err := cm.validateConfigAfterChange(); err != nil {
+		rollback()
+		return fmt.Errorf("configuration validation failed after updating protocol: %w", err)
+	}
+
+	// Success - cleanup backup
+	if backupPath != "" {
+		os.Remove(backupPath)
 	}
 
 	utils.Success("Updated protocol %s", tag)
@@ -1178,5 +1287,35 @@ func (cm *ConfigManager) updateTransportPath(config map[string]interface{}, path
 		}
 	}
 
+	return nil
+}
+
+// Enhanced rollback mechanism helper methods (DESIGN.md requirement line 575)
+
+// createAutoBackup creates an automatic backup before configuration changes
+func (cm *ConfigManager) createAutoBackup(operation string) (string, error) {
+	timestamp := strings.ReplaceAll(strings.Replace(utils.GetCurrentTime(), " ", "_", -1), ":", "-")
+	backupPath := fmt.Sprintf("/tmp/xrf-auto-backup-%s-%s.tar.gz", operation, timestamp)
+	
+	if err := cm.BackupConfig(backupPath); err != nil {
+		return "", fmt.Errorf("failed to create auto backup: %w", err)
+	}
+	
+	return backupPath, nil
+}
+
+// restoreFromBackup restores configuration from backup file
+func (cm *ConfigManager) restoreFromBackup(backupPath string) error {
+	return cm.RestoreConfig(backupPath)
+}
+
+// validateConfigAfterChange validates configuration after making changes
+func (cm *ConfigManager) validateConfigAfterChange() error {
+	// Use xray test command to validate configuration
+	cmd := exec.Command("xray", "test", "-confdir", cm.confDir)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("configuration validation failed: %s", string(output))
+	}
 	return nil
 }
