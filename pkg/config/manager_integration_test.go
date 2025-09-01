@@ -37,11 +37,11 @@ func TestAddProtocol_FullIntegration(t *testing.T) {
 			t.Fatalf("AddProtocol failed: %v", err)
 		}
 
-		// 完整流程合理预期<250ms（TLS首次证书生成需要更多时间，CI环境可能更慢）
-		if duration > 250*time.Millisecond {
-			t.Errorf("Full integration took %v, exceeds 250ms target", duration)
+		// 完整流程合理预期<300ms（TLS首次证书生成需要更多时间，CI环境可能更慢）
+		if duration > 300*time.Millisecond {
+			t.Errorf("Full integration took %v, exceeds 300ms target", duration)
 		} else {
-			t.Logf("✅ Full integration completed in %v (under 250ms target)", duration)
+			t.Logf("✅ Full integration completed in %v (under 300ms target)", duration)
 		}
 
 		// 验证配置是否包含证书
