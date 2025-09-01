@@ -12,7 +12,7 @@ func GenerateQRCode(text string) (string, error) {
 	if _, err := exec.LookPath("qrencode"); err == nil {
 		return generateQRWithQrencode(text)
 	}
-	
+
 	// 如果没有 qrencode，返回 ASCII 艺术二维码提示
 	return generateASCIIQR(text), nil
 }
@@ -31,7 +31,7 @@ func generateQRWithQrencode(text string) (string, error) {
 func generateASCIIQR(text string) string {
 	// 这是一个简化的 ASCII 二维码表示
 	// 在实际应用中，用户应该安装 qrencode 来获得真正的二维码
-	
+
 	qrArt := `
     ████████████████████████████████
     ██                            ██
@@ -57,7 +57,7 @@ func generateASCIIQR(text string) string {
     
     安装后重新运行此命令可获得扫描二维码。
 `
-	
+
 	return qrArt
 }
 
@@ -65,7 +65,7 @@ func generateASCIIQR(text string) string {
 func PrintQRCode(text string, tag string) {
 	PrintSection("二维码分享")
 	PrintInfo("协议标签: %s", tag)
-	
+
 	qrcode, err := GenerateQRCode(text)
 	if err != nil {
 		PrintError("生成二维码失败: %v", err)
@@ -73,14 +73,14 @@ func PrintQRCode(text string, tag string) {
 		fmt.Printf("  %s\n", text)
 		return
 	}
-	
+
 	// 显示二维码
 	fmt.Println(qrcode)
-	
+
 	// 显示链接
 	PrintSubSection("分享链接")
 	fmt.Printf("  %s\n", text)
-	
+
 	// 显示使用提示
 	PrintSubSection("使用说明")
 	PrintInfo("1. 使用客户端扫描上方二维码")

@@ -11,14 +11,14 @@ import (
 
 // SystemInfo 系统信息
 type SystemInfo struct {
-	OS           string `json:"os"`           // 操作系统 (linux, darwin, windows)
-	Distribution string `json:"distribution"` // 发行版 (ubuntu, centos, debian, etc.)
-	Version      string `json:"version"`      // 版本号
-	Architecture string `json:"architecture"` // 架构 (amd64, arm64, etc.)
-	Kernel       string `json:"kernel"`       // 内核版本
-	HasSystemd   bool   `json:"has_systemd"`  // 是否支持 systemd
-	HasFirewall  bool   `json:"has_firewall"` // 是否有防火墙
-	FirewallType string `json:"firewall_type"` // 防火墙类型
+	OS             string `json:"os"`              // 操作系统 (linux, darwin, windows)
+	Distribution   string `json:"distribution"`    // 发行版 (ubuntu, centos, debian, etc.)
+	Version        string `json:"version"`         // 版本号
+	Architecture   string `json:"architecture"`    // 架构 (amd64, arm64, etc.)
+	Kernel         string `json:"kernel"`          // 内核版本
+	HasSystemd     bool   `json:"has_systemd"`     // 是否支持 systemd
+	HasFirewall    bool   `json:"has_firewall"`    // 是否有防火墙
+	FirewallType   string `json:"firewall_type"`   // 防火墙类型
 	PackageManager string `json:"package_manager"` // 包管理器
 }
 
@@ -175,7 +175,7 @@ func (d *Detector) parseLSBRelease(content string, info *SystemInfo) error {
 // inferDistroFromPrettyName 从PRETTY_NAME推断发行版
 func (d *Detector) inferDistroFromPrettyName(prettyName string) string {
 	prettyName = strings.ToLower(prettyName)
-	
+
 	distroKeywords := map[string]string{
 		"ubuntu":    "ubuntu",
 		"debian":    "debian",
@@ -226,10 +226,10 @@ func (d *Detector) detectSystemd() bool {
 // detectFirewall 检测防火墙
 func (d *Detector) detectFirewall() (bool, string) {
 	firewallCommands := map[string]string{
-		"ufw":        "ufw",
-		"firewall-cmd": "firewalld", 
-		"iptables":   "iptables",
-		"nft":        "nftables",
+		"ufw":          "ufw",
+		"firewall-cmd": "firewalld",
+		"iptables":     "iptables",
+		"nft":          "nftables",
 	}
 
 	for cmd, fwType := range firewallCommands {
@@ -272,13 +272,13 @@ func (d *Detector) isFirewallActive(cmd, fwType string) bool {
 // detectPackageManager 检测包管理器
 func (d *Detector) detectPackageManager() string {
 	packageManagers := []string{
-		"apt",     // Debian/Ubuntu
-		"yum",     // RHEL/CentOS 7
-		"dnf",     // Fedora/RHEL 8+
-		"pacman",  // Arch Linux
-		"zypper",  // openSUSE
-		"apk",     // Alpine Linux
-		"brew",    // macOS
+		"apt",    // Debian/Ubuntu
+		"yum",    // RHEL/CentOS 7
+		"dnf",    // Fedora/RHEL 8+
+		"pacman", // Arch Linux
+		"zypper", // openSUSE
+		"apk",    // Alpine Linux
+		"brew",   // macOS
 	}
 
 	for _, pm := range packageManagers {

@@ -326,11 +326,11 @@ func (i *Installer) installDependencies() error {
 	}
 
 	utils.PrintInfo("执行命令: %s", cmd)
-	
+
 	// 这里应该执行系统命令，但为了安全，我们只是提示用户
 	utils.PrintWarning("请手动执行以下命令安装依赖:")
 	utils.PrintInfo("  %s", cmd)
-	
+
 	return fmt.Errorf("请安装依赖后重新运行")
 }
 
@@ -472,6 +472,6 @@ func (i *Installer) copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	return os.Chmod(dst, sourceInfo.Mode())
 }

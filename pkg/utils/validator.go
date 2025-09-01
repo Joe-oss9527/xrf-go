@@ -23,7 +23,7 @@ func IsPortAvailable(port int) bool {
 	if port < 1 || port > 65535 {
 		return false
 	}
-	
+
 	// 检查 TCP 端口
 	tcpAddr := fmt.Sprintf(":%d", port)
 	listener, err := net.Listen("tcp", tcpAddr)
@@ -31,7 +31,7 @@ func IsPortAvailable(port int) bool {
 		return false
 	}
 	listener.Close()
-	
+
 	// 检查 UDP 端口
 	udpAddr := fmt.Sprintf(":%d", port)
 	conn, err := net.ListenPacket("udp", udpAddr)
@@ -39,7 +39,7 @@ func IsPortAvailable(port int) bool {
 		return false
 	}
 	conn.Close()
-	
+
 	return true
 }
 
@@ -48,17 +48,17 @@ func FindAvailablePort(startPort, endPort int) (int, error) {
 		// 兼容旧版本，endPort为0时搜索到65535
 		endPort = 65535
 	}
-	
+
 	if startPort < 1 || startPort > 65535 || endPort < 1 || endPort > 65535 || startPort > endPort {
 		return 0, fmt.Errorf("invalid port range: %d-%d", startPort, endPort)
 	}
-	
+
 	for port := startPort; port <= endPort; port++ {
 		if IsPortAvailable(port) {
 			return port, nil
 		}
 	}
-	
+
 	return 0, fmt.Errorf("no available ports in range %d-%d", startPort, endPort)
 }
 
@@ -81,10 +81,10 @@ func SuggestPort(protocolType string, preferredPort int) (int, error) {
 		}
 		return 0, fmt.Errorf("port %d is not available", preferredPort)
 	}
-	
+
 	// 根据协议类型建议默认端口范围
 	var startPort, endPort int
-	
+
 	switch protocolType {
 	case "vless-reality", "vr", "VLESS-REALITY":
 		// REALITY 推荐使用 443 或 80
@@ -117,7 +117,7 @@ func SuggestPort(protocolType string, preferredPort int) (int, error) {
 		// 默认高端口范围
 		startPort, endPort = 10000, 20000
 	}
-	
+
 	return FindAvailablePort(startPort, endPort)
 }
 
@@ -139,12 +139,12 @@ func ValidateDomain(domain string) error {
 	if domain == "" {
 		return fmt.Errorf("domain cannot be empty")
 	}
-	
+
 	domainRegex := regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
 	if !domainRegex.MatchString(domain) {
 		return fmt.Errorf("invalid domain format: %s", domain)
 	}
-	
+
 	return nil
 }
 
@@ -160,11 +160,11 @@ func ValidateURL(urlStr string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	if u.Scheme == "" || u.Host == "" {
 		return fmt.Errorf("invalid URL: missing scheme or host")
 	}
-	
+
 	return nil
 }
 
@@ -172,16 +172,16 @@ func ValidatePath(path string) error {
 	if path == "" {
 		return fmt.Errorf("path cannot be empty")
 	}
-	
+
 	if !strings.HasPrefix(path, "/") {
 		return fmt.Errorf("path must start with /")
 	}
-	
+
 	pathRegex := regexp.MustCompile(`^/[a-zA-Z0-9\-._~!$&'()*+,;=:@/%]*$`)
 	if !pathRegex.MatchString(path) {
 		return fmt.Errorf("invalid path format: %s", path)
 	}
-	
+
 	return nil
 }
 
@@ -202,18 +202,18 @@ func ValidateXrayConfig(configPath string) error {
 	if configPath == "" {
 		return fmt.Errorf("config path cannot be empty")
 	}
-	
+
 	xrayPath, err := exec.LookPath("xray")
 	if err != nil {
 		return fmt.Errorf("xray not found in PATH")
 	}
-	
+
 	cmd := exec.Command(xrayPath, "test", "-config", configPath)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("config validation failed: %s", string(output))
 	}
-	
+
 	return nil
 }
 
@@ -221,22 +221,22 @@ func ValidateXrayConfDir(confDir string) error {
 	if confDir == "" {
 		return fmt.Errorf("confdir path cannot be empty")
 	}
-	
+
 	if _, err := os.Stat(confDir); os.IsNotExist(err) {
 		return fmt.Errorf("confdir does not exist: %s", confDir)
 	}
-	
+
 	xrayPath, err := exec.LookPath("xray")
 	if err != nil {
 		return fmt.Errorf("xray not found in PATH")
 	}
-	
+
 	cmd := exec.Command(xrayPath, "run", "-confdir", confDir, "-test")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("confdir validation failed: %s", string(output))
 	}
-	
+
 	return nil
 }
 
@@ -245,14 +245,14 @@ func ValidateProtocolType(protocol string) error {
 		"vless", "vmess", "trojan", "shadowsocks", "dokodemo-door",
 		"http", "socks", "freedom", "blackhole",
 	}
-	
+
 	protocol = strings.ToLower(protocol)
 	for _, valid := range validProtocols {
 		if protocol == valid {
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("unsupported protocol: %s", protocol)
 }
 
@@ -261,14 +261,14 @@ func ValidateTransportType(transport string) error {
 		"tcp", "kcp", "ws", "websocket", "http", "h2", "quic", "grpc",
 		"httpupgrade", "splithttp",
 	}
-	
+
 	transport = strings.ToLower(transport)
 	for _, valid := range validTransports {
 		if transport == valid {
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("unsupported transport: %s", transport)
 }
 
@@ -276,14 +276,14 @@ func ValidateSecurityType(security string) error {
 	validSecurity := []string{
 		"none", "tls", "reality", "xtls",
 	}
-	
+
 	security = strings.ToLower(security)
 	for _, valid := range validSecurity {
 		if security == valid {
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("unsupported security: %s", security)
 }
 
@@ -292,11 +292,11 @@ func ParsePortString(portStr string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid port format: %s", portStr)
 	}
-	
+
 	if err := ValidatePort(port); err != nil {
 		return 0, err
 	}
-	
+
 	return port, nil
 }
 
@@ -312,11 +312,11 @@ func ValidateDirectoryExists(path string) error {
 	if os.IsNotExist(err) {
 		return fmt.Errorf("directory does not exist: %s", path)
 	}
-	
+
 	if !info.IsDir() {
 		return fmt.Errorf("path is not a directory: %s", path)
 	}
-	
+
 	return nil
 }
 
@@ -325,7 +325,7 @@ func IsValidUUID(uuid string) bool {
 	if uuid == "" {
 		return false
 	}
-	
+
 	// UUID v4 格式: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
 	// 其中 y 必须是 8, 9, a, 或 b
 	uuidRegex := regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[4][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)

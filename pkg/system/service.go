@@ -358,7 +358,7 @@ func (sm *ServiceManager) PrintServiceStatus() error {
 	}
 
 	utils.PrintSection("Xray 服务状态")
-	
+
 	// 状态指示器
 	var statusIcon string
 	var statusColor func(...interface{}) string
@@ -379,11 +379,11 @@ func (sm *ServiceManager) PrintServiceStatus() error {
 	// 详细信息
 	fmt.Printf("   Active: %s\n", formatActiveStatus(status))
 	fmt.Printf("   Enabled: %s\n", formatEnabledStatus(status.Enabled))
-	
+
 	if status.StartTime != "" {
 		fmt.Printf("   Started: %s\n", status.StartTime)
 	}
-	
+
 	if status.Memory != "" {
 		fmt.Printf("   Memory: %s\n", status.Memory)
 	}
@@ -455,11 +455,11 @@ func (sm *ServiceManager) reloadSystemd() error {
 // GetServiceLogs 获取服务日志
 func (sm *ServiceManager) GetServiceLogs(lines int, follow bool) error {
 	args := []string{"journalctl", "-u", ServiceName, "--no-pager"}
-	
+
 	if lines > 0 {
 		args = append(args, "-n", fmt.Sprintf("%d", lines))
 	}
-	
+
 	if follow {
 		args = append(args, "-f")
 	}
@@ -477,7 +477,7 @@ func (sm *ServiceManager) ValidateConfig() error {
 
 	cmd := exec.Command(XrayBinaryPath, "run", "-confdir", XrayConfsDir, "-test")
 	output, err := cmd.CombinedOutput()
-	
+
 	if err != nil {
 		return fmt.Errorf("配置验证失败: %w\n输出: %s", err, string(output))
 	}
@@ -496,7 +496,7 @@ func (sm *ServiceManager) ConfigureUser() error {
 	cmd := exec.Command("id", ServiceUser)
 	if err := cmd.Run(); err != nil {
 		utils.PrintInfo("创建服务用户: %s", ServiceUser)
-		
+
 		// 创建系统用户
 		createCmd := exec.Command("useradd", "-r", "-s", "/bin/false", ServiceUser)
 		if output, err := createCmd.CombinedOutput(); err != nil {

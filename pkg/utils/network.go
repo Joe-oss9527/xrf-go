@@ -14,7 +14,7 @@ func GetRandomAvailablePort() (int, error) {
 		return 0, err
 	}
 	defer listener.Close()
-	
+
 	addr := listener.Addr().(*net.TCPAddr)
 	return addr.Port, nil
 }
@@ -33,10 +33,10 @@ func ValidatePortRange(portStr string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid port format: %s", portStr)
 	}
-	
+
 	if port < 1 || port > 65535 {
 		return 0, fmt.Errorf("port must be between 1 and 65535, got %d", port)
 	}
-	
+
 	return port, nil
 }

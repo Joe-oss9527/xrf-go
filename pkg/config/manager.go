@@ -40,7 +40,7 @@ func NewConfigManager(confDir string) *ConfigManager {
 	if confDir == "" {
 		confDir = DefaultConfDir
 	}
-	
+
 	return &ConfigManager{
 		confDir:   confDir,
 		renderer:  NewTemplateRenderer(),
@@ -54,12 +54,12 @@ func (cm *ConfigManager) Initialize() error {
 	if err := os.MkdirAll(cm.confDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
-	
+
 	// 创建基础配置文件
 	if err := cm.createBaseConfigs(); err != nil {
 		return fmt.Errorf("failed to create base configs: %w", err)
 	}
-	
+
 	utils.Info("Initialized XRF configuration directory: %s", cm.confDir)
 	return nil
 }
@@ -102,64 +102,77 @@ func (cm *ConfigManager) createBaseConfigs() error {
 			data:     TemplateData{},
 		},
 	}
-	
+
 	for _, config := range baseConfigs {
 		configPath := filepath.Join(cm.confDir, config.filename)
-		
+
 		// 如果文件已存在，跳过
 		if _, err := os.Stat(configPath); err == nil {
 			continue
 		}
-		
+
 		content, err := cm.renderer.Render(config.template, config.data)
 		if err != nil {
 			return fmt.Errorf("failed to render template for %s: %w", config.filename, err)
 		}
-		
+
 		if err := ioutil.WriteFile(configPath, []byte(content), 0644); err != nil {
 			return fmt.Errorf("failed to write config file %s: %w", config.filename, err)
 		}
-		
+
 		utils.Debug("Created base config: %s", config.filename)
 	}
-	
+
 	return nil
 }
 
 // AddProtocol 添加协议配置
 func (cm *ConfigManager) AddProtocol(protocolType, tag string, options map[string]interface{}) error {
+	// 检查标签是否已存在
+	_, err := cm.GetProtocolInfo(tag)
+	if err == nil {
+		return &utils.XRFError{
+			Type:    utils.ErrConfigConflict,
+			Message: fmt.Sprintf("协议标签 '%s' 已存在", tag),
+			Context: map[string]interface{}{
+				"tag":      tag,
+				"protocol": protocolType,
+			},
+		}
+	}
+
 	protocol, err := cm.protocols.GetProtocol(protocolType)
 	if err != nil {
-		return err
+		return utils.NewProtocolNotSupportedError(protocolType)
 	}
-	
+
 	// 生成模板数据
 	data, err := cm.generateTemplateData(protocol, tag, options)
 	if err != nil {
 		return fmt.Errorf("failed to generate template data: %w", err)
 	}
-	
+
 	// 获取协议模板
 	templateStr, exists := GetProtocolTemplate(protocol.Template)
 	if !exists {
 		return fmt.Errorf("template not found for protocol: %s", protocol.Template)
 	}
-	
+
 	// 渲染配置模板
 	content, err := cm.renderer.Render(templateStr, data)
 	if err != nil {
 		return fmt.Errorf("failed to render protocol template: %w", err)
 	}
-	
+
 	// 生成配置文件名
 	filename := cm.generateConfigFilename("inbound", tag, false)
 	configPath := filepath.Join(cm.confDir, filename)
-	
+
 	// 写入配置文件
 	if err := ioutil.WriteFile(configPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to write protocol config: %w", err)
 	}
-	
+
 	utils.Success("Added protocol %s with tag %s", protocol.Name, tag)
 	return nil
 }
@@ -171,11 +184,11 @@ func (cm *ConfigManager) RemoveProtocol(tag string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	if len(files) == 0 {
 		return fmt.Errorf("protocol with tag '%s' not found", tag)
 	}
-	
+
 	// 删除配置文件
 	for _, file := range files {
 		if err := os.Remove(file.Path); err != nil {
@@ -184,7 +197,7 @@ func (cm *ConfigManager) RemoveProtocol(tag string) error {
 			utils.Debug("Removed config file: %s", file.Filename)
 		}
 	}
-	
+
 	utils.Success("Removed protocol with tag %s", tag)
 	return nil
 }
@@ -192,12 +205,12 @@ func (cm *ConfigManager) RemoveProtocol(tag string) error {
 // ListProtocols 列出所有协议配置
 func (cm *ConfigManager) ListProtocols() ([]ProtocolInfo, error) {
 	var protocols []ProtocolInfo
-	
+
 	files, err := cm.listConfigFiles()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 过滤入站配置文件
 	for _, file := range files {
 		if file.Type == "inbound" {
@@ -209,7 +222,7 @@ func (cm *ConfigManager) ListProtocols() ([]ProtocolInfo, error) {
 			protocols = append(protocols, info)
 		}
 	}
-	
+
 	return protocols, nil
 }
 
@@ -220,33 +233,33 @@ func (cm *ConfigManager) UpdateProtocol(tag string, options map[string]interface
 	if err != nil {
 		return err
 	}
-	
+
 	if len(files) == 0 {
 		return fmt.Errorf("protocol with tag '%s' not found", tag)
 	}
-	
+
 	// 读取现有配置
 	configFile := files[0]
 	existingConfig, err := cm.readConfigFile(configFile.Path)
 	if err != nil {
 		return err
 	}
-	
+
 	// 更新配置
 	if err := cm.mergeConfigOptions(existingConfig, options); err != nil {
 		return err
 	}
-	
+
 	// 写回配置文件
 	updatedContent, err := json.MarshalIndent(existingConfig, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal updated config: %w", err)
 	}
-	
+
 	if err := ioutil.WriteFile(configFile.Path, updatedContent, 0644); err != nil {
 		return fmt.Errorf("failed to write updated config: %w", err)
 	}
-	
+
 	utils.Success("Updated protocol %s", tag)
 	return nil
 }
@@ -259,24 +272,24 @@ func (cm *ConfigManager) ValidateConfig() error {
 // ReloadConfig 热重载配置（发送USR1信号到Xray进程）
 func (cm *ConfigManager) ReloadConfig() error {
 	utils.PrintInfo("重载 Xray 配置...")
-	
+
 	// 首先验证配置
 	if err := cm.ValidateConfig(); err != nil {
 		return fmt.Errorf("配置验证失败，取消重载: %w", err)
 	}
-	
+
 	// 查找 Xray 进程
 	cmd := exec.Command("pgrep", "-f", "xray.*confdir")
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("未找到 Xray 进程，请检查服务状态")
 	}
-	
+
 	pids := strings.Fields(strings.TrimSpace(string(output)))
 	if len(pids) == 0 {
 		return fmt.Errorf("未找到运行中的 Xray 进程")
 	}
-	
+
 	// 向所有 Xray 进程发送 USR1 信号
 	for _, pid := range pids {
 		killCmd := exec.Command("kill", "-USR1", pid)
@@ -286,7 +299,7 @@ func (cm *ConfigManager) ReloadConfig() error {
 			utils.PrintSuccess("向进程 %s 发送热重载信号", pid)
 		}
 	}
-	
+
 	utils.PrintSuccess("配置热重载完成")
 	return nil
 }
@@ -297,28 +310,28 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	// 读取完整配置文件
 	files, err := cm.findConfigFilesByTag(tag)
 	if err != nil {
 		return "", err
 	}
-	
+
 	if len(files) == 0 {
 		return "", fmt.Errorf("protocol with tag '%s' not found", tag)
 	}
-	
+
 	config, err := cm.readConfigFile(files[0].Path)
 	if err != nil {
 		return "", err
 	}
-	
+
 	// 合并配置信息
 	urlConfig := make(map[string]interface{})
 	urlConfig["host"] = "localhost" // 默认主机，用户可以修改
 	urlConfig["port"] = info.Port
 	urlConfig["remark"] = tag
-	
+
 	// 从配置中提取所需信息
 	if inbounds, exists := config["inbounds"]; exists {
 		if inboundList, ok := inbounds.([]interface{}); ok && len(inboundList) > 0 {
@@ -327,7 +340,7 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 				if port, exists := inbound["port"]; exists {
 					urlConfig["port"] = port
 				}
-				
+
 				// 提取设置
 				if settings, exists := inbound["settings"]; exists {
 					if settingsMap, ok := settings.(map[string]interface{}); ok {
@@ -344,7 +357,7 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 								}
 							}
 						}
-						
+
 						// 提取加密方法（Shadowsocks）
 						if method, exists := settingsMap["method"]; exists {
 							urlConfig["method"] = method
@@ -354,14 +367,14 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 						}
 					}
 				}
-				
+
 				// 提取流设置
 				if streamSettings, exists := inbound["streamSettings"]; exists {
 					if streamMap, ok := streamSettings.(map[string]interface{}); ok {
 						if network, exists := streamMap["network"]; exists {
 							urlConfig["network"] = network
 						}
-						
+
 						// WebSocket 设置
 						if wsSettings, exists := streamMap["wsSettings"]; exists {
 							if wsMap, ok := wsSettings.(map[string]interface{}); ok {
@@ -370,7 +383,7 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 								}
 							}
 						}
-						
+
 						// HTTPUpgrade 设置
 						if huSettings, exists := streamMap["httpupgradeSettings"]; exists {
 							if huMap, ok := huSettings.(map[string]interface{}); ok {
@@ -379,7 +392,7 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 								}
 							}
 						}
-						
+
 						// REALITY 设置
 						if realitySettings, exists := streamMap["realitySettings"]; exists {
 							if realityMap, ok := realitySettings.(map[string]interface{}); ok {
@@ -404,7 +417,7 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 								}
 							}
 						}
-						
+
 						// TLS 设置
 						if security, exists := streamMap["security"]; exists {
 							urlConfig["security"] = security
@@ -414,7 +427,7 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 			}
 		}
 	}
-	
+
 	return utils.GenerateProtocolURL(info.Type, tag, urlConfig)
 }
 
@@ -424,19 +437,19 @@ func (cm *ConfigManager) BackupConfig(backupPath string) error {
 		// 生成默认备份路径
 		backupPath = fmt.Sprintf("xrf-backup-%s.tar.gz", strings.ReplaceAll(strings.Replace(utils.GetCurrentTime(), " ", "_", -1), ":", "-"))
 	}
-	
+
 	// 检查配置目录是否存在
 	if _, err := os.Stat(cm.confDir); os.IsNotExist(err) {
 		return fmt.Errorf("configuration directory does not exist: %s", cm.confDir)
 	}
-	
+
 	// 创建临时目录
 	tempDir, err := ioutil.TempDir("", "xrf-backup-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
-	
+
 	// 创建备份信息文件
 	backupInfo := map[string]interface{}{
 		"version":     "1.0.0",
@@ -444,41 +457,41 @@ func (cm *ConfigManager) BackupConfig(backupPath string) error {
 		"config_dir":  cm.confDir,
 		"protocols":   []string{},
 	}
-	
+
 	// 列出所有协议
 	protocols, err := cm.ListProtocols()
 	if err != nil {
 		return fmt.Errorf("failed to list protocols: %w", err)
 	}
-	
+
 	protocolTags := make([]string, len(protocols))
 	for i, p := range protocols {
 		protocolTags[i] = p.Tag
 	}
 	backupInfo["protocols"] = protocolTags
-	
+
 	// 写入备份信息
 	infoPath := filepath.Join(tempDir, "backup-info.json")
 	infoBytes, _ := json.MarshalIndent(backupInfo, "", "  ")
 	if err := ioutil.WriteFile(infoPath, infoBytes, 0644); err != nil {
 		return fmt.Errorf("failed to write backup info: %w", err)
 	}
-	
+
 	// 复制配置文件
 	configBackupDir := filepath.Join(tempDir, "confs")
 	if err := os.MkdirAll(configBackupDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config backup dir: %w", err)
 	}
-	
+
 	if err := copyDir(cm.confDir, configBackupDir); err != nil {
 		return fmt.Errorf("failed to copy configuration files: %w", err)
 	}
-	
+
 	// 创建 tar.gz 压缩包
 	if err := createTarGz(tempDir, backupPath); err != nil {
 		return fmt.Errorf("failed to create backup archive: %w", err)
 	}
-	
+
 	utils.Success("Configuration backed up to: %s", backupPath)
 	return nil
 }
@@ -489,53 +502,53 @@ func (cm *ConfigManager) RestoreConfig(backupPath string) error {
 	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
 		return fmt.Errorf("backup file does not exist: %s", backupPath)
 	}
-	
+
 	// 创建临时目录
 	tempDir, err := ioutil.TempDir("", "xrf-restore-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
-	
+
 	// 解压备份文件
 	if err := extractTarGz(backupPath, tempDir); err != nil {
 		return fmt.Errorf("failed to extract backup: %w", err)
 	}
-	
+
 	// 读取备份信息
 	infoPath := filepath.Join(tempDir, "backup-info.json")
 	infoBytes, err := ioutil.ReadFile(infoPath)
 	if err != nil {
 		return fmt.Errorf("failed to read backup info: %w", err)
 	}
-	
+
 	var backupInfo map[string]interface{}
 	if err := json.Unmarshal(infoBytes, &backupInfo); err != nil {
 		return fmt.Errorf("failed to parse backup info: %w", err)
 	}
-	
+
 	// 备份当前配置（以防恢复失败）
-	currentBackupPath := fmt.Sprintf("xrf-current-backup-%s.tar.gz", 
+	currentBackupPath := fmt.Sprintf("xrf-current-backup-%s.tar.gz",
 		strings.ReplaceAll(strings.Replace(utils.GetCurrentTime(), " ", "_", -1), ":", "-"))
-	
+
 	utils.Info("Creating backup of current configuration...")
 	if err := cm.BackupConfig(currentBackupPath); err != nil {
 		utils.Warning("Failed to backup current configuration: %v", err)
 	}
-	
+
 	// 删除当前配置目录（如果存在）
 	if _, err := os.Stat(cm.confDir); err == nil {
 		if err := os.RemoveAll(cm.confDir); err != nil {
 			return fmt.Errorf("failed to remove current configuration: %w", err)
 		}
 	}
-	
+
 	// 恢复配置文件
 	configRestoreDir := filepath.Join(tempDir, "confs")
 	if err := copyDir(configRestoreDir, cm.confDir); err != nil {
 		return fmt.Errorf("failed to restore configuration files: %w", err)
 	}
-	
+
 	// 显示恢复信息
 	if backupTime, exists := backupInfo["backup_time"]; exists {
 		utils.Success("Configuration restored from backup created at: %v", backupTime)
@@ -545,7 +558,7 @@ func (cm *ConfigManager) RestoreConfig(backupPath string) error {
 			utils.Info("Restored %d protocol configurations", len(protocolList))
 		}
 	}
-	
+
 	return nil
 }
 
@@ -556,30 +569,30 @@ func copyDir(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		
+
 		relPath, _ := filepath.Rel(src, path)
 		dstPath := filepath.Join(dst, relPath)
-		
+
 		if info.IsDir() {
 			return os.MkdirAll(dstPath, info.Mode())
 		}
-		
+
 		srcFile, err := os.Open(path)
 		if err != nil {
 			return err
 		}
 		defer srcFile.Close()
-		
+
 		dstFile, err := os.Create(dstPath)
 		if err != nil {
 			return err
 		}
 		defer dstFile.Close()
-		
+
 		if err := dstFile.Chmod(info.Mode()); err != nil {
 			return err
 		}
-		
+
 		_, err = srcFile.WriteTo(dstFile)
 		return err
 	})
@@ -608,7 +621,7 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 	data := TemplateData{
 		Tag: tag,
 	}
-	
+
 	// 设置端口（包含端口冲突检查）
 	if port, exists := options["port"]; exists {
 		if portInt, ok := port.(int); ok {
@@ -619,7 +632,7 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 			}
 		}
 	}
-	
+
 	// 智能端口分配
 	if data.Port == 0 {
 		// 检查默认端口是否可用
@@ -642,7 +655,7 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 			return data, fmt.Errorf("端口 %d 已被占用，请选择其他端口", data.Port)
 		}
 	}
-	
+
 	// 生成 UUID
 	if uuid, exists := options["uuid"]; exists {
 		if uuidStr, ok := uuid.(string); ok {
@@ -652,7 +665,7 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 	if data.UUID == "" && (strings.Contains(protocol.Name, "VLESS") || strings.Contains(protocol.Name, "VMess")) {
 		data.UUID = utils.GenerateUUID()
 	}
-	
+
 	// 设置加密方法（Shadowsocks）
 	if method, exists := options["method"]; exists {
 		if methodStr, ok := method.(string); ok {
@@ -666,7 +679,7 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 			data.Method = "chacha20-poly1305"
 		}
 	}
-	
+
 	// 生成密码
 	if password, exists := options["password"]; exists {
 		if passwordStr, ok := password.(string); ok {
@@ -683,7 +696,7 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 			data.Password = utils.GeneratePassword(16)
 		}
 	}
-	
+
 	// 设置路径
 	if path, exists := options["path"]; exists {
 		if pathStr, ok := path.(string); ok {
@@ -693,14 +706,14 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 	if data.Path == "" {
 		data.Path = "/ws"
 	}
-	
+
 	// 设置域名
 	if host, exists := options["host"]; exists {
 		if hostStr, ok := host.(string); ok {
 			data.Host = hostStr
 		}
 	}
-	
+
 	// REALITY 特定设置
 	if strings.Contains(protocol.Name, "REALITY") {
 		if dest, exists := options["dest"]; exists {
@@ -711,7 +724,7 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 		if data.Dest == "" {
 			data.Dest = "www.microsoft.com"
 		}
-		
+
 		if serverName, exists := options["serverName"]; exists {
 			if serverNameStr, ok := serverName.(string); ok {
 				data.ServerName = serverNameStr
@@ -720,7 +733,7 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 		if data.ServerName == "" {
 			data.ServerName = data.Dest
 		}
-		
+
 		// 生成密钥对
 		if privateKey, exists := options["privateKey"]; exists {
 			if privateKeyStr, ok := privateKey.(string); ok {
@@ -732,7 +745,7 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 				data.PrivateKey = priv
 			}
 		}
-		
+
 		if shortId, exists := options["shortId"]; exists {
 			if shortIdStr, ok := shortId.(string); ok {
 				data.ShortId = shortIdStr
@@ -742,7 +755,7 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 			data.ShortId = utils.GenerateShortID(8)
 		}
 	}
-	
+
 	// TLS 设置
 	if protocol.RequiresTLS {
 		data.Security = "tls"
@@ -757,14 +770,14 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 			}
 		}
 	}
-	
+
 	return data, nil
 }
 
 // 生成配置文件名
 func (cm *ConfigManager) generateConfigFilename(configType, name string, isTail bool) string {
 	priority := cm.getConfigPriority(configType, name)
-	
+
 	if isTail {
 		return fmt.Sprintf("%02d-%s-%s-tail.json", priority, configType, name)
 	}
@@ -780,7 +793,7 @@ func (cm *ConfigManager) getConfigPriority(configType, name string) int {
 		"outbound": {"direct": 20, "block": 21, "default": 25},
 		"routing":  {"basic": 90, "default": 91, "tail": 99},
 	}
-	
+
 	if typeMap, exists := priorityMap[configType]; exists {
 		if priority, exists := typeMap[name]; exists {
 			return priority
@@ -798,23 +811,23 @@ func (cm *ConfigManager) listConfigFiles() ([]ConfigFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config directory: %w", err)
 	}
-	
+
 	var configFiles []ConfigFile
 	for _, file := range files {
 		if file.IsDir() || !strings.HasSuffix(file.Name(), ".json") {
 			continue
 		}
-		
+
 		configFile := cm.parseConfigFileName(file.Name())
 		configFile.Path = filepath.Join(cm.confDir, file.Name())
 		configFiles = append(configFiles, configFile)
 	}
-	
+
 	// 按优先级排序
 	sort.Slice(configFiles, func(i, j int) bool {
 		return configFiles[i].Priority < configFiles[j].Priority
 	})
-	
+
 	return configFiles, nil
 }
 
@@ -823,20 +836,20 @@ func (cm *ConfigManager) parseConfigFileName(filename string) ConfigFile {
 	// 格式: 00-type-name.json 或 99-type-name-tail.json
 	name := strings.TrimSuffix(filename, ".json")
 	parts := strings.Split(name, "-")
-	
+
 	if len(parts) < 3 {
 		return ConfigFile{Filename: filename}
 	}
-	
+
 	priority, _ := strconv.Atoi(parts[0])
 	configType := parts[1]
 	configName := strings.Join(parts[2:], "-")
-	
+
 	isTail := strings.HasSuffix(configName, "-tail")
 	if isTail {
 		configName = strings.TrimSuffix(configName, "-tail")
 	}
-	
+
 	return ConfigFile{
 		Priority: priority,
 		Type:     configType,
@@ -852,19 +865,19 @@ func (cm *ConfigManager) findConfigFilesByTag(tag string) ([]ConfigFile, error) 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var matchingFiles []ConfigFile
 	for _, file := range files {
 		config, err := cm.readConfigFile(file.Path)
 		if err != nil {
 			continue
 		}
-		
+
 		if cm.configContainsTag(config, tag) {
 			matchingFiles = append(matchingFiles, file)
 		}
 	}
-	
+
 	return matchingFiles, nil
 }
 
@@ -883,7 +896,7 @@ func (cm *ConfigManager) configContainsTag(config map[string]interface{}, tag st
 			}
 		}
 	}
-	
+
 	if outbounds, exists := config["outbounds"]; exists {
 		if outboundList, ok := outbounds.([]interface{}); ok {
 			for _, outbound := range outboundList {
@@ -897,7 +910,7 @@ func (cm *ConfigManager) configContainsTag(config map[string]interface{}, tag st
 			}
 		}
 	}
-	
+
 	return false
 }
 
@@ -907,12 +920,12 @@ func (cm *ConfigManager) readConfigFile(path string) (map[string]interface{}, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
-	
+
 	var config map[string]interface{}
 	if err := json.Unmarshal(content, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
-	
+
 	return config, nil
 }
 
@@ -922,14 +935,14 @@ func (cm *ConfigManager) parseProtocolInfo(file ConfigFile) (ProtocolInfo, error
 	if err != nil {
 		return ProtocolInfo{}, err
 	}
-	
+
 	info := ProtocolInfo{
 		Tag:        file.Name,
 		ConfigFile: file.Filename,
 		Settings:   make(map[string]interface{}),
 		Status:     "unknown",
 	}
-	
+
 	if inbounds, exists := config["inbounds"]; exists {
 		if inboundList, ok := inbounds.([]interface{}); ok && len(inboundList) > 0 {
 			if inbound, ok := inboundList[0].(map[string]interface{}); ok {
@@ -948,7 +961,7 @@ func (cm *ConfigManager) parseProtocolInfo(file ConfigFile) (ProtocolInfo, error
 			}
 		}
 	}
-	
+
 	return info, nil
 }
 
@@ -958,18 +971,18 @@ func (cm *ConfigManager) GetProtocolInfo(tag string) (ProtocolInfo, error) {
 	if err != nil {
 		return ProtocolInfo{}, err
 	}
-	
+
 	if len(files) == 0 {
 		return ProtocolInfo{}, fmt.Errorf("protocol with tag '%s' not found", tag)
 	}
-	
+
 	// 使用第一个匹配的文件
 	file := files[0]
 	info, err := cm.parseProtocolInfo(file)
 	if err != nil {
 		return ProtocolInfo{}, err
 	}
-	
+
 	// 获取协议定义以补充更多信息
 	if protocol, err := cm.protocols.GetProtocol(info.Type); err == nil {
 		info.Settings["description"] = protocol.Description
@@ -978,7 +991,7 @@ func (cm *ConfigManager) GetProtocolInfo(tag string) (ProtocolInfo, error) {
 		info.Settings["requiresDomain"] = protocol.RequiresDomain
 		info.Settings["supportedTransports"] = protocol.SupportedTransports
 	}
-	
+
 	return info, nil
 }
 
@@ -1011,14 +1024,14 @@ func (cm *ConfigManager) mergeConfigOptions(config map[string]interface{}, optio
 			config[key] = newValue
 		}
 	}
-	
+
 	return nil
 }
 
 // 更新入站端口
 func (cm *ConfigManager) updateInboundPort(config map[string]interface{}, portValue interface{}) error {
 	var port int
-	
+
 	switch v := portValue.(type) {
 	case int:
 		port = v
@@ -1033,11 +1046,11 @@ func (cm *ConfigManager) updateInboundPort(config map[string]interface{}, portVa
 	default:
 		return fmt.Errorf("unsupported port type: %T", portValue)
 	}
-	
+
 	if port < 1 || port > 65535 {
 		return fmt.Errorf("port must be between 1 and 65535")
 	}
-	
+
 	// 更新 inbounds 中的端口
 	if inbounds, exists := config["inbounds"]; exists {
 		if inboundList, ok := inbounds.([]interface{}); ok {
@@ -1048,7 +1061,7 @@ func (cm *ConfigManager) updateInboundPort(config map[string]interface{}, portVa
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1058,7 +1071,7 @@ func (cm *ConfigManager) updatePassword(config map[string]interface{}, passwordV
 	if !ok {
 		return fmt.Errorf("password must be a string")
 	}
-	
+
 	// 更新 inbounds 中的密码
 	if inbounds, exists := config["inbounds"]; exists {
 		if inboundList, ok := inbounds.([]interface{}); ok {
@@ -1086,7 +1099,7 @@ func (cm *ConfigManager) updatePassword(config map[string]interface{}, passwordV
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1096,12 +1109,12 @@ func (cm *ConfigManager) updateUUID(config map[string]interface{}, uuidValue int
 	if !ok {
 		return fmt.Errorf("uuid must be a string")
 	}
-	
+
 	// 验证 UUID 格式
 	if !utils.IsValidUUID(uuid) {
 		return fmt.Errorf("invalid UUID format")
 	}
-	
+
 	// 更新 inbounds 中的 UUID
 	if inbounds, exists := config["inbounds"]; exists {
 		if inboundList, ok := inbounds.([]interface{}); ok {
@@ -1124,7 +1137,7 @@ func (cm *ConfigManager) updateUUID(config map[string]interface{}, uuidValue int
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1134,11 +1147,11 @@ func (cm *ConfigManager) updateTransportPath(config map[string]interface{}, path
 	if !ok {
 		return fmt.Errorf("path must be a string")
 	}
-	
+
 	if path == "" || !strings.HasPrefix(path, "/") {
 		return fmt.Errorf("path must start with /")
 	}
-	
+
 	// 更新 inbounds 中的路径
 	if inbounds, exists := config["inbounds"]; exists {
 		if inboundList, ok := inbounds.([]interface{}); ok {
@@ -1164,6 +1177,6 @@ func (cm *ConfigManager) updateTransportPath(config map[string]interface{}, path
 			}
 		}
 	}
-	
+
 	return nil
 }

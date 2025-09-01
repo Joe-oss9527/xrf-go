@@ -368,31 +368,31 @@ func (t *TemplateRenderer) Render(templateStr string, data TemplateData) (string
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
-	
+
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
-	
+
 	return buf.String(), nil
 }
 
 // 获取模板映射
 func GetTemplateMap() map[string]string {
 	return map[string]string{
-		"base":                   BaseConfigTemplate,
-		"dns":                    DNSConfigTemplate,
-		"vless-reality":          VLESSRealityInboundTemplate,
-		"vless-ws":               VLESSWSInboundTemplate,
-		"vmess-ws":               VMessWSInboundTemplate,
-		"vless-httpupgrade":      VLESSHTTPUpgradeInboundTemplate,
-		"trojan-ws":              TrojanWSInboundTemplate,
-		"shadowsocks":            ShadowsocksInboundTemplate,
-		"shadowsocks-2022":       Shadowsocks2022InboundTemplate,
-		"direct-outbound":        DirectOutboundTemplate,
-		"block-outbound":         BlockOutboundTemplate,
-		"basic-routing":          BasicRoutingTemplate,
-		"tail-routing":           TailRoutingTemplate,
+		"base":              BaseConfigTemplate,
+		"dns":               DNSConfigTemplate,
+		"vless-reality":     VLESSRealityInboundTemplate,
+		"vless-ws":          VLESSWSInboundTemplate,
+		"vmess-ws":          VMessWSInboundTemplate,
+		"vless-httpupgrade": VLESSHTTPUpgradeInboundTemplate,
+		"trojan-ws":         TrojanWSInboundTemplate,
+		"shadowsocks":       ShadowsocksInboundTemplate,
+		"shadowsocks-2022":  Shadowsocks2022InboundTemplate,
+		"direct-outbound":   DirectOutboundTemplate,
+		"block-outbound":    BlockOutboundTemplate,
+		"basic-routing":     BasicRoutingTemplate,
+		"tail-routing":      TailRoutingTemplate,
 	}
 }
 

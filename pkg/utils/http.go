@@ -29,16 +29,16 @@ func (h *HTTPClient) Get(url string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to make GET request: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP request failed with status: %s", resp.Status)
 	}
-	
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
-	
+
 	return body, nil
 }
 
@@ -48,26 +48,26 @@ func (h *HTTPClient) Download(url, outputPath string) error {
 		return fmt.Errorf("failed to download file: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download failed with status: %s", resp.Status)
 	}
-	
+
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
-	
+
 	out, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
 	defer out.Close()
-	
+
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -77,24 +77,24 @@ func (h *HTTPClient) DownloadWithProgress(url, outputPath string, progressFn fun
 		return fmt.Errorf("failed to download file: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download failed with status: %s", resp.Status)
 	}
-	
+
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
-	
+
 	out, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
 	defer out.Close()
-	
+
 	var downloaded int64
 	total := resp.ContentLength
-	
+
 	buf := make([]byte, 32*1024) // 32KB buffer
 	for {
 		n, err := resp.Body.Read(buf)
@@ -114,7 +114,7 @@ func (h *HTTPClient) DownloadWithProgress(url, outputPath string, progressFn fun
 			return fmt.Errorf("failed to read response: %w", err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -123,7 +123,7 @@ func (h *HTTPClient) Head(url string) (*http.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to make HEAD request: %w", err)
 	}
-	
+
 	return resp, nil
 }
 
@@ -133,48 +133,48 @@ func (h *HTTPClient) CheckURL(url string) error {
 		return err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("URL check failed with status: %s", resp.Status)
 	}
-	
+
 	return nil
 }
 
 func GetPublicIP() (string, error) {
 	client := NewHTTPClient(10 * time.Second)
-	
+
 	urls := []string{
 		"https://api.ipify.org",
 		"https://icanhazip.com",
 		"https://ipinfo.io/ip",
 		"https://checkip.amazonaws.com",
 	}
-	
+
 	for _, url := range urls {
 		if ip, err := client.Get(url); err == nil {
 			return string(ip), nil
 		}
 	}
-	
+
 	return "", fmt.Errorf("failed to get public IP from all sources")
 }
 
 func TestHTTPConnectivity() error {
 	client := NewHTTPClient(5 * time.Second)
-	
+
 	testURLs := []string{
 		"https://www.google.com",
 		"https://www.cloudflare.com",
 		"https://github.com",
 	}
-	
+
 	for _, url := range testURLs {
 		if err := client.CheckURL(url); err == nil {
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("no internet connectivity detected")
 }
 

@@ -19,21 +19,21 @@ func GenerateVLESSURL(uuid, host string, port int, params map[string]string) (st
 	if uuid == "" || host == "" || port == 0 {
 		return "", fmt.Errorf("uuid, host, and port are required")
 	}
-	
+
 	// 构建基础 URL
 	u := &url.URL{
 		Scheme: "vless",
 		User:   url.User(uuid),
 		Host:   fmt.Sprintf("%s:%d", host, port),
 	}
-	
+
 	// 添加查询参数
 	query := u.Query()
 	for key, value := range params {
 		query.Set(key, value)
 	}
 	u.RawQuery = query.Encode()
-	
+
 	return u.String(), nil
 }
 
@@ -52,12 +52,12 @@ func GenerateVMessURL(config map[string]interface{}) (string, error) {
 		"path": getStringValue(config, "path", ""),
 		"tls":  getStringValue(config, "security", "none"),
 	}
-	
+
 	jsonBytes, err := json.Marshal(vmessConfig)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal vmess config: %w", err)
 	}
-	
+
 	encoded := base64.StdEncoding.EncodeToString(jsonBytes)
 	return "vmess://" + encoded, nil
 }
@@ -67,21 +67,21 @@ func GenerateTrojanURL(password, host string, port int, params map[string]string
 	if password == "" || host == "" || port == 0 {
 		return "", fmt.Errorf("password, host, and port are required")
 	}
-	
+
 	// 构建基础 URL
 	u := &url.URL{
 		Scheme: "trojan",
 		User:   url.User(password),
 		Host:   fmt.Sprintf("%s:%d", host, port),
 	}
-	
+
 	// 添加查询参数
 	query := u.Query()
 	for key, value := range params {
 		query.Set(key, value)
 	}
 	u.RawQuery = query.Encode()
-	
+
 	return u.String(), nil
 }
 
@@ -90,32 +90,32 @@ func GenerateShadowsocksURL(method, password, host string, port int, remark stri
 	if method == "" || password == "" || host == "" || port == 0 {
 		return "", fmt.Errorf("method, password, host, and port are required")
 	}
-	
+
 	// 构建 user info: method:password
 	userInfo := fmt.Sprintf("%s:%s", method, password)
 	encoded := base64.URLEncoding.EncodeToString([]byte(userInfo))
-	
+
 	// 构建 URL
 	baseURL := fmt.Sprintf("ss://%s@%s:%d", encoded, host, port)
-	
+
 	if remark != "" {
 		baseURL += "#" + url.QueryEscape(remark)
 	}
-	
+
 	return baseURL, nil
 }
 
 // GenerateProtocolURL 根据协议类型生成分享链接
 func GenerateProtocolURL(protocolType, tag string, config map[string]interface{}) (string, error) {
 	protocolType = strings.ToLower(protocolType)
-	
+
 	// 提取通用信息
 	host := getStringValue(config, "host", "")
 	if host == "" {
 		host = getStringValue(config, "domain", "localhost")
 	}
 	port := getIntValue(config, "port", 0)
-	
+
 	switch {
 	case strings.Contains(protocolType, "vless"):
 		uuid := getStringValue(config, "uuid", "")
@@ -125,10 +125,10 @@ func GenerateProtocolURL(protocolType, tag string, config map[string]interface{}
 				uuid = getStringValue(clients[0], "id", "")
 			}
 		}
-		
+
 		params := make(map[string]string)
 		params["type"] = getStringValue(config, "network", "tcp")
-		
+
 		// 根据协议类型添加特定参数
 		if strings.Contains(protocolType, "reality") {
 			params["security"] = "reality"
@@ -144,16 +144,16 @@ func GenerateProtocolURL(protocolType, tag string, config map[string]interface{}
 			params["security"] = "none"
 			params["path"] = getStringValue(config, "path", "/")
 		}
-		
+
 		if remark := getStringValue(config, "remark", tag); remark != "" {
 			params["remarks"] = remark
 		}
-		
+
 		return GenerateVLESSURL(uuid, host, port, params)
-		
+
 	case strings.Contains(protocolType, "vmess"):
 		return GenerateVMessURL(config)
-		
+
 	case strings.Contains(protocolType, "trojan"):
 		password := getStringValue(config, "password", "")
 		if password == "" {
@@ -162,7 +162,7 @@ func GenerateProtocolURL(protocolType, tag string, config map[string]interface{}
 				password = getStringValue(clients[0], "password", "")
 			}
 		}
-		
+
 		params := make(map[string]string)
 		params["security"] = "tls"
 		params["type"] = getStringValue(config, "network", "tcp")
@@ -172,16 +172,16 @@ func GenerateProtocolURL(protocolType, tag string, config map[string]interface{}
 		if remark := getStringValue(config, "remark", tag); remark != "" {
 			params["remarks"] = remark
 		}
-		
+
 		return GenerateTrojanURL(password, host, port, params)
-		
+
 	case strings.Contains(protocolType, "shadowsocks"):
 		method := getStringValue(config, "method", "chacha20-poly1305")
 		password := getStringValue(config, "password", "")
 		remark := getStringValue(config, "remark", tag)
-		
+
 		return GenerateShadowsocksURL(method, password, host, port, remark)
-		
+
 	default:
 		return "", fmt.Errorf("unsupported protocol: %s", protocolType)
 	}

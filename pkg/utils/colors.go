@@ -2,8 +2,8 @@ package utils
 
 import (
 	"fmt"
-	"time"
 	"github.com/fatih/color"
+	"time"
 )
 
 var (
@@ -14,7 +14,7 @@ var (
 	Magenta = color.New(color.FgMagenta).SprintFunc()
 	Cyan    = color.New(color.FgCyan).SprintFunc()
 	White   = color.New(color.FgWhite).SprintFunc()
-	
+
 	BoldRed     = color.New(color.FgRed, color.Bold).SprintFunc()
 	BoldGreen   = color.New(color.FgGreen, color.Bold).SprintFunc()
 	BoldYellow  = color.New(color.FgYellow, color.Bold).SprintFunc()
@@ -60,13 +60,13 @@ func PrintProtocolInfo(name, tag, port, status string) {
 	} else if status == "unknown" {
 		statusColor = Yellow
 	}
-	
-	fmt.Printf("  %s %s [%s] %s\n", 
+
+	fmt.Printf("  %s %s [%s] %s\n",
 		BoldCyan("•"),
 		BoldWhite(name),
 		Yellow("Port: "+port),
 		statusColor(status))
-	
+
 	if tag != "" {
 		fmt.Printf("    Tag: %s\n", tag)
 	}
@@ -78,18 +78,18 @@ func PrintDetailedProtocolInfo(name, tag, protocolType string, port int, setting
 	fmt.Printf("  %s: %s\n", BoldWhite("标签"), BoldYellow(tag))
 	fmt.Printf("  %s: %s\n", BoldWhite("协议类型"), protocolType)
 	fmt.Printf("  %s: %d\n", BoldWhite("端口"), port)
-	
+
 	// 显示协议信息
 	if desc, exists := settings["description"]; exists {
 		fmt.Printf("  %s: %s\n", BoldWhite("描述"), desc)
 	}
-	
+
 	if aliases, exists := settings["aliases"]; exists {
 		if aliasSlice, ok := aliases.([]string); ok {
 			fmt.Printf("  %s: %s\n", BoldWhite("别名"), fmt.Sprintf("[%s]", joinStringSlice(aliasSlice, ", ")))
 		}
 	}
-	
+
 	// 显示协议特性
 	fmt.Printf("\n%s %s\n", BoldCyan("─"), BoldWhite("协议特性"))
 	if requiresTLS, exists := settings["requiresTLS"]; exists {
@@ -101,7 +101,7 @@ func PrintDetailedProtocolInfo(name, tag, protocolType string, port int, setting
 			fmt.Printf("  %s: %s\n", BoldWhite("需要 TLS"), tlsStatus)
 		}
 	}
-	
+
 	if requiresDomain, exists := settings["requiresDomain"]; exists {
 		if requires, ok := requiresDomain.(bool); ok {
 			domainStatus := "否"
@@ -111,16 +111,16 @@ func PrintDetailedProtocolInfo(name, tag, protocolType string, port int, setting
 			fmt.Printf("  %s: %s\n", BoldWhite("需要域名"), domainStatus)
 		}
 	}
-	
+
 	if transports, exists := settings["supportedTransports"]; exists {
 		if transportSlice, ok := transports.([]string); ok {
 			fmt.Printf("  %s: %s\n", BoldWhite("支持的传输方式"), fmt.Sprintf("[%s]", joinStringSlice(transportSlice, ", ")))
 		}
 	}
-	
+
 	// 显示连接配置
 	fmt.Printf("\n%s %s\n", BoldCyan("─"), BoldWhite("连接配置"))
-	
+
 	// 显示 UUID（如果存在）
 	if clients, exists := settings["clients"]; exists {
 		if clientList, ok := clients.([]interface{}); ok && len(clientList) > 0 {
@@ -131,7 +131,7 @@ func PrintDetailedProtocolInfo(name, tag, protocolType string, port int, setting
 			}
 		}
 	}
-	
+
 	// 显示密码（如果存在）
 	if method, exists := settings["method"]; exists {
 		fmt.Printf("  %s: %s\n", BoldWhite("加密方法"), method)
@@ -139,14 +139,14 @@ func PrintDetailedProtocolInfo(name, tag, protocolType string, port int, setting
 			fmt.Printf("  %s: %s\n", BoldWhite("密码"), password)
 		}
 	}
-	
+
 	// 显示传输设置
 	if streamSettings, exists := settings["streamSettings"]; exists {
 		if streamMap, ok := streamSettings.(map[string]interface{}); ok {
 			if network, exists := streamMap["network"]; exists {
 				fmt.Printf("  %s: %s\n", BoldWhite("传输协议"), network)
 			}
-			
+
 			// WebSocket 设置
 			if wsSettings, exists := streamMap["wsSettings"]; exists {
 				if wsMap, ok := wsSettings.(map[string]interface{}); ok {
@@ -155,7 +155,7 @@ func PrintDetailedProtocolInfo(name, tag, protocolType string, port int, setting
 					}
 				}
 			}
-			
+
 			// HTTPUpgrade 设置
 			if huSettings, exists := streamMap["httpupgradeSettings"]; exists {
 				if huMap, ok := huSettings.(map[string]interface{}); ok {
@@ -164,7 +164,7 @@ func PrintDetailedProtocolInfo(name, tag, protocolType string, port int, setting
 					}
 				}
 			}
-			
+
 			// REALITY 设置
 			if realitySettings, exists := streamMap["realitySettings"]; exists {
 				if realityMap, ok := realitySettings.(map[string]interface{}); ok {
@@ -185,7 +185,7 @@ func PrintDetailedProtocolInfo(name, tag, protocolType string, port int, setting
 			}
 		}
 	}
-	
+
 	fmt.Printf("\n%s %s\n", BoldCyan("─"), BoldWhite("配置文件信息"))
 	if configFile, exists := settings["config_file"]; exists {
 		fmt.Printf("  %s: %s\n", BoldWhite("配置文件"), configFile)
