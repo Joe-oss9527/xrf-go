@@ -164,7 +164,7 @@ func EncodePrivateKey(privateKey crypto.PrivateKey) ([]byte, error) {
 			Bytes: keyBytes,
 		}
 		return pem.EncodeToMemory(block), nil
-		
+
 	case *ecdsa.PrivateKey:
 		keyBytes, err := x509.MarshalECPrivateKey(key)
 		if err != nil {
@@ -175,7 +175,7 @@ func EncodePrivateKey(privateKey crypto.PrivateKey) ([]byte, error) {
 			Bytes: keyBytes,
 		}
 		return pem.EncodeToMemory(block), nil
-		
+
 	default:
 		keyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
 		if err != nil {

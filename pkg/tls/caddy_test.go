@@ -55,7 +55,7 @@ func TestSetBinaryPath(t *testing.T) {
 
 func TestIsCaddyInstalled(t *testing.T) {
 	manager := NewCaddyManager()
-	
+
 	// 测试不存在的路径
 	manager.SetBinaryPath("/tmp/non-existent-caddy")
 	if manager.isCaddyInstalled() {
@@ -66,7 +66,7 @@ func TestIsCaddyInstalled(t *testing.T) {
 	tmpFile := filepath.Join(t.TempDir(), "fake-caddy")
 	os.WriteFile(tmpFile, []byte("fake caddy"), 0644)
 	manager.SetBinaryPath(tmpFile)
-	
+
 	// 应该返回 false 因为不是真正的 caddy 二进制文件
 	if manager.isCaddyInstalled() {
 		t.Error("Expected fake Caddy not recognized as installed")
@@ -76,7 +76,7 @@ func TestIsCaddyInstalled(t *testing.T) {
 func TestCopyFile(t *testing.T) {
 	manager := NewCaddyManager()
 	tmpDir := t.TempDir()
-	
+
 	// 创建源文件
 	srcPath := filepath.Join(tmpDir, "source.txt")
 	content := "test content"
@@ -176,7 +176,7 @@ func TestCreateSystemdService(t *testing.T) {
 
 	// 由于需要 root 权限写入 /etc/systemd/system，这个测试只验证服务内容生成
 	// 实际的服务安装需要在集成测试中进行
-	
+
 	// 验证服务名设置正确
 	if manager.serviceName != "caddy" {
 		t.Errorf("Expected service name 'caddy', got '%s'", manager.serviceName)
@@ -187,13 +187,13 @@ func TestCreateSystemdService(t *testing.T) {
 
 func TestGetServiceStatus(t *testing.T) {
 	manager := NewCaddyManager()
-	
+
 	// 测试获取不存在服务的状态
 	status, err := manager.GetServiceStatus()
 	if err != nil {
 		t.Logf("Service status check failed (expected): %v", err)
 	}
-	
+
 	// 对于不存在的服务，应该返回 "inactive"
 	if status != "inactive" {
 		t.Logf("Service status: %s", status)
@@ -202,7 +202,7 @@ func TestGetServiceStatus(t *testing.T) {
 
 func TestIsRunning(t *testing.T) {
 	manager := NewCaddyManager()
-	
+
 	// 对于未安装的 Caddy，应该返回 false
 	if manager.IsRunning() {
 		t.Error("Expected Caddy not running, but got running")

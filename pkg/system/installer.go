@@ -479,7 +479,7 @@ func (i *Installer) copyFile(src, dst string) error {
 // UpdateXray 更新到指定版本的 Xray
 func (i *Installer) UpdateXray(version string) error {
 	utils.PrintInfo("更新 Xray 到版本: %s", version)
-	
+
 	// 备份当前版本
 	backupPath := XrayBinaryPath + ".backup"
 	if i.IsInstalled() {
@@ -487,7 +487,7 @@ func (i *Installer) UpdateXray(version string) error {
 			utils.PrintWarning("备份当前版本失败: %v", err)
 		}
 	}
-	
+
 	// 执行安装 (会覆盖现有文件)
 	if err := i.InstallXray(); err != nil {
 		// 恢复备份
@@ -496,10 +496,10 @@ func (i *Installer) UpdateXray(version string) error {
 		}
 		return fmt.Errorf("更新失败: %w", err)
 	}
-	
+
 	// 清理备份文件
 	os.Remove(backupPath)
-	
+
 	utils.PrintSuccess("Xray 更新完成!")
 	return nil
 }

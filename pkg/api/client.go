@@ -25,7 +25,7 @@ type InboundConfig struct {
 	Settings map[string]interface{} `json:"settings"`
 }
 
-// OutboundConfig represents an outbound configuration  
+// OutboundConfig represents an outbound configuration
 type OutboundConfig struct {
 	Tag      string                 `json:"tag"`
 	Protocol string                 `json:"protocol"`
@@ -44,7 +44,7 @@ func NewAPIClient(address string) *APIClient {
 	if address == "" {
 		address = "127.0.0.1:10085" // Default Xray API address
 	}
-	
+
 	return &APIClient{
 		address: address,
 		timeout: 10 * time.Second,
@@ -56,7 +56,7 @@ func (c *APIClient) Connect() error {
 	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, c.address, 
+	conn, err := grpc.DialContext(ctx, c.address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
@@ -88,15 +88,15 @@ func (c *APIClient) AddInbound(config *InboundConfig) error {
 	// TODO: Implement actual gRPC call to HandlerService.AddInbound
 	// This requires the proto-generated client code which has complex dependencies
 	// For now, this is a placeholder that validates the connection and config
-	
+
 	if config.Tag == "" {
 		return fmt.Errorf("inbound tag cannot be empty")
 	}
-	
+
 	if config.Port <= 0 || config.Port > 65535 {
 		return fmt.Errorf("invalid port: %d", config.Port)
 	}
-	
+
 	// Placeholder for actual gRPC call
 	return fmt.Errorf("API client implementation pending - gRPC stubs not generated yet")
 }
@@ -107,7 +107,7 @@ func (c *APIClient) RemoveInbound(tag string) error {
 	if c.conn == nil {
 		return fmt.Errorf("API client not connected")
 	}
-	
+
 	if tag == "" {
 		return fmt.Errorf("inbound tag cannot be empty")
 	}
@@ -121,7 +121,7 @@ func (c *APIClient) AddOutbound(config *OutboundConfig) error {
 	if c.conn == nil {
 		return fmt.Errorf("API client not connected")
 	}
-	
+
 	if config.Tag == "" {
 		return fmt.Errorf("outbound tag cannot be empty")
 	}
@@ -135,7 +135,7 @@ func (c *APIClient) RemoveOutbound(tag string) error {
 	if c.conn == nil {
 		return fmt.Errorf("API client not connected")
 	}
-	
+
 	if tag == "" {
 		return fmt.Errorf("outbound tag cannot be empty")
 	}
@@ -150,7 +150,7 @@ func (c *APIClient) GetStats(name string, reset bool) (int64, error) {
 	if c.conn == nil {
 		return 0, fmt.Errorf("API client not connected")
 	}
-	
+
 	if name == "" {
 		return 0, fmt.Errorf("stats name cannot be empty")
 	}
@@ -218,7 +218,7 @@ func (c *APIClient) GetAddress() string {
 // NOTE: This is a foundation implementation for the Xray API client
 // The actual gRPC method calls require generated protobuf client stubs
 // which need to be created from the Xray-core proto files.
-// 
+//
 // To complete this implementation:
 // 1. Generate gRPC client stubs from Xray-core proto files
 // 2. Replace placeholder methods with actual gRPC calls
@@ -227,5 +227,5 @@ func (c *APIClient) GetAddress() string {
 // This implementation satisfies the DESIGN.md requirements by providing:
 // - API manager interface (lines 82-90)
 // - AddInbound/RemoveInbound dynamic configuration
-// - GetStats traffic statistics retrieval  
+// - GetStats traffic statistics retrieval
 // - RestartCore functionality

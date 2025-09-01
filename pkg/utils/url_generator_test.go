@@ -66,19 +66,19 @@ func TestGenerateVLESSURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := GenerateVLESSURL(tt.uuid, tt.host, tt.port, tt.params)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("GenerateVLESSURL() expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("GenerateVLESSURL() unexpected error: %v", err)
 				return
 			}
-			
+
 			for _, contains := range tt.contains {
 				if !strings.Contains(result, contains) {
 					t.Errorf("GenerateVLESSURL() = %v, should contain %v", result, contains)

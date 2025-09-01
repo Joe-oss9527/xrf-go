@@ -62,7 +62,7 @@ func TestInitialize(t *testing.T) {
 
 	// 初始化 (注意：这会尝试连接 Let's Encrypt，在测试中可能失败)
 	err := manager.Initialize()
-	
+
 	// 至少验证目录创建成功
 	if _, err := os.Stat(certDir); os.IsNotExist(err) {
 		t.Errorf("Certificate directory was not created: %s", certDir)

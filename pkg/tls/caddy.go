@@ -55,13 +55,13 @@ type CaddyTLSAutomation struct {
 }
 
 type CaddyTLSPolicy struct {
-	Subjects []string `json:"subjects,omitempty"`
+	Subjects []string      `json:"subjects,omitempty"`
 	Issuers  []interface{} `json:"issuers,omitempty"`
 }
 
 type CaddyServer struct {
-	Listen []string      `json:"listen"`
-	Routes []CaddyRoute  `json:"routes"`
+	Listen []string     `json:"listen"`
+	Routes []CaddyRoute `json:"routes"`
 }
 
 type CaddyRoute struct {
@@ -75,7 +75,7 @@ type CaddyMatch struct {
 }
 
 type CaddyHandle struct {
-	Handler   string         `json:"handler"`
+	Handler   string          `json:"handler"`
 	Upstreams []CaddyUpstream `json:"upstreams,omitempty"`
 	// 反向代理配置
 	// 静态文件服务配置

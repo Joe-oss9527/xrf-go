@@ -24,7 +24,7 @@ const (
 	LEProductionURL = "https://acme-v02.api.letsencrypt.org/directory"
 	// Let's Encrypt 测试环境
 	LEStagingURL = "https://acme-staging-v02.api.letsencrypt.org/directory"
-	
+
 	// 默认目录
 	DefaultACMEDir = "/etc/xray/acme"
 	DefaultCertDir = "/etc/xray/certs"
@@ -32,11 +32,11 @@ const (
 
 // ACMEManager ACME 证书管理器
 type ACMEManager struct {
-	email     string
-	caURL     string
-	certDir   string
-	acmeDir   string
-	client    *lego.Client
+	email   string
+	caURL   string
+	certDir string
+	acmeDir string
+	client  *lego.Client
 }
 
 // ACMEUser 实现 ACME 用户接口
@@ -48,9 +48,9 @@ type ACMEUser struct {
 
 // ACMEAccount ACME 账户持久化
 type ACMEAccount struct {
-	Email        string `json:"email"`
+	Email        string                 `json:"email"`
 	Registration *registration.Resource `json:"registration"`
-	PrivateKey   []byte `json:"private_key"`
+	PrivateKey   []byte                 `json:"private_key"`
 }
 
 // GetEmail 获取用户邮箱

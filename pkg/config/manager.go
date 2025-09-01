@@ -1296,11 +1296,11 @@ func (cm *ConfigManager) updateTransportPath(config map[string]interface{}, path
 func (cm *ConfigManager) createAutoBackup(operation string) (string, error) {
 	timestamp := strings.ReplaceAll(strings.Replace(utils.GetCurrentTime(), " ", "_", -1), ":", "-")
 	backupPath := fmt.Sprintf("/tmp/xrf-auto-backup-%s-%s.tar.gz", operation, timestamp)
-	
+
 	if err := cm.BackupConfig(backupPath); err != nil {
 		return "", fmt.Errorf("failed to create auto backup: %w", err)
 	}
-	
+
 	return backupPath, nil
 }
 
