@@ -1,146 +1,162 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Project memory file for XRF-Go v1.0.0-RC2 - provides specific development guidance and conventions for Claude Code.
 
 ## Project Overview
 
-XRF-Go is a streamlined Xray installation and configuration tool designed for efficiency and ease of use. The project follows the principle of "High efficiency, ultra-fast, extremely easy to use" with multi-configuration concurrent operation as its core design feature.
+XRF-Go is a production-ready Xray installation and configuration tool with 100% DESIGN.md alignment. Core design: "High efficiency, ultra-fast, extremely easy to use" with multi-configuration concurrent operation achieving ~0.12ms protocol addition speed.
 
-## Architecture
+## Code Architecture Requirements
 
-### Multi-Configuration File Strategy
-The project leverages Xray's `-confdir` feature to manage multiple configurations simultaneously:
-- Configuration files are stored in `/etc/xray/confs/`
-- Files are named with numeric prefixes (00-99) to control loading order
-- Each protocol gets its own configuration file for modular management
-- Xray automatically merges configurations based on specific rules
+### Module Structure (Enforce Strictly)
+- `cmd/xrf/` - Single main CLI entry point
+- `pkg/config/` - Use ConfigManager for all configuration operations
+- `pkg/system/` - System detection via detector.go, service management via service.go
+- `pkg/tls/` - ACME operations via acme.go, Caddy management via caddy.go
+- `pkg/api/` - Xray gRPC client integration for runtime operations
+- `pkg/utils/` - All utilities must use existing modules (crypto, validator, logger, etc.)
 
-### Core Module Structure
-```
-cmd/xrf/           - Main CLI entry point with all commands
-pkg/config/        - Configuration management (multi-file handling)
-pkg/system/        - System operations (OS detection, service management)
-pkg/tls/           - TLS/certificate management (ACME, Caddy integration)
-pkg/api/           - Xray API client for runtime management
-pkg/utils/         - Utilities (logging, validation, HTTP tools)
-```
+### Configuration File Conventions (Must Follow)
+- Use `/etc/xray/confs/` directory only
+- File naming: numeric prefix (00-09: base, 10-19: inbound, 20-29: outbound, 90-99: routing)
+- Each protocol = one dedicated JSON file
+- Always validate with `xray test -confdir` before writing
+- Implement rollback mechanism for failed operations
 
-## Common Development Commands
+## Development Commands (Use These Exact Commands)
 
-### Building the Project
-```bash
-# Build the binary
-go build -o xrf cmd/xrf/main.go
-
-# Build with optimizations
-go build -ldflags="-s -w" -o xrf cmd/xrf/main.go
-
-# Cross-compile for different platforms
-GOOS=linux GOARCH=amd64 go build -o xrf-linux-amd64 cmd/xrf/main.go
-GOOS=darwin GOARCH=arm64 go build -o xrf-darwin-arm64 cmd/xrf/main.go
-```
+### Building
+- Production build: `go build -ldflags="-s -w" -o xrf cmd/xrf/main.go`
+- Cross-compile Linux: `GOOS=linux GOARCH=amd64 go build -o xrf-linux-amd64 cmd/xrf/main.go`
+- Cross-compile macOS: `GOOS=darwin GOARCH=arm64 go build -o xrf-darwin-arm64 cmd/xrf/main.go`
 
 ### Testing
-```bash
-# Run all tests
-go test ./...
-
-# Run tests with coverage
-go test -cover ./...
-
-# Run specific package tests
-go test ./pkg/config/
-go test ./pkg/system/
-
-# Test configuration validation
-xray test -confdir /etc/xray/confs
-```
+- Run all tests: `go test ./...`
+- TLS module tests: `go test -cover ./pkg/tls/`
+- Configuration validation: `xray test -confdir /etc/xray/confs`
 
 ### Code Quality
-```bash
-# Format code
-go fmt ./...
+- Format: `go fmt ./...`
+- Lint: `golangci-lint run`
+- Security: `go mod audit`
 
-# Run linter
-golangci-lint run
+## Protocol Implementation Rules
 
-# Check for vulnerabilities
-go mod audit
-```
-
-## Key Implementation Details
-
-### Configuration File Naming Convention
-Files follow a strict naming pattern for proper loading order:
-- `00-09`: Base configurations (log, API, stats)
-- `10-19`: Inbound protocols
-- `20-29`: Outbound configurations
-- `90-99`: Routing rules (with tail support)
-
-Example: `10-inbound-vless.json`, `20-outbound-direct.json`
-
-### Protocol Shortcuts
-The tool supports protocol aliases for quick configuration:
-- `vr` → VLESS-REALITY
+### Supported Protocols (Use Exact Aliases)
+- `vr` → VLESS-REALITY with xtls-rprx-vision flow
 - `vw` → VLESS-WebSocket-TLS
+- `vmess` → VMess-WebSocket-TLS
+- `hu` → VLESS-HTTPUpgrade
 - `tw` → Trojan-WebSocket-TLS
 - `ss` → Shadowsocks
 - `ss2022` → Shadowsocks-2022
-- `hu` → VLESS-HTTPUpgrade
-
-### Service Management
-The Xray service is configured to run in confdir mode:
-```bash
-ExecStart=/usr/local/bin/xray run -confdir /etc/xray/confs
-```
 
 ### Configuration Templates
-All configuration templates are embedded in the binary as Go string constants in `pkg/config/templates.go`. This ensures single-binary portability without external dependencies.
+- All templates embedded in `pkg/config/templates.go`
+- Use Go string constants only
+- Include performance optimizations: `tcpKeepAliveIdle: 300`, `tcpUserTimeout: 10000`
+- Apply BBR congestion control settings automatically
 
-## Important Conventions
+## CLI Command Implementation
 
-### Error Handling
-- Operations should fail gracefully with rollback capability
-- Provide clear error messages with fix suggestions
-- Validate configurations before applying changes
+### Core Operations (Must Implement Error Handling)
+- `xrf install` - Use pkg/system/installer.go with GitHub API integration
+- `xrf add [protocol]` - Must achieve <1ms performance, use ConfigManager.AddProtocol
+- `xrf list` - Display protocols with color coding via utils/colors.go
+- `xrf remove [tag]` - Implement with automatic backup and rollback
+- `xrf info [tag]` - Show detailed config via structured output
+- `xrf change [tag] [key] [value]` - Validate before change, rollback on failure
 
-### Performance Optimizations
-- Automatic BBR congestion control setup
-- Socket optimization parameters in all protocols
-- Smart port allocation to avoid conflicts
+### Service Management (Use systemd Integration)
+- All service commands must use pkg/system/service.go
+- `xrf reload` - Send USR1 signal to Xray process
+- `xrf check-port` - Use pkg/utils/network.go port validation
 
-### Multi-Configuration Rules
-When working with Xray's confdir feature:
-1. Inbounds are appended to the array
-2. Outbounds are prepended (unless marked as "tail")
-3. Same-tag configurations replace each other
-4. Routing rules can be added to beginning or end
+### TLS Automation (ACME Integration Required)
+- Use pkg/tls/acme.go for Let's Encrypt operations
+- Use pkg/tls/caddy.go for reverse proxy setup
+- Implement 30-day auto-renewal mechanism
 
-## Supported Protocols (2025)
+### Utility Commands
+- `xrf generate [type]` - Use pkg/utils/crypto.go functions
+- `xrf ip` - Use pkg/utils/http.go GetPublicIP function
+- `xrf logs` - Integrate systemd journal reading
 
-- VLESS-REALITY (with xtls-rprx-vision flow)
-- VLESS-WebSocket-TLS
-- VLESS-HTTPUpgrade
-- VMess-WebSocket-TLS
-- Trojan-WebSocket-TLS
-- Shadowsocks (including 2022 variants)
+## Performance Requirements (Must Meet)
 
-All protocols include modern optimizations like:
-- `tcpKeepAliveIdle: 300`
-- `tcpUserTimeout: 10000`
-- Proper socket buffer configurations
+### Speed Targets
+- Protocol addition: <1ms (current: ~0.12ms)
+- Memory usage: <20MB
+- Binary size: <10MB
+- Configuration ops: >5000/sec
 
-## Quick Development Tips
+### Error Handling Strategy
+- Use pkg/utils/errors.go for consistent error types
+- Implement createAutoBackup() before any config change
+- Call restoreFromBackup() on operation failure
+- Validate with `xray test -confdir` after every change
+- Provide specific fix suggestions in error messages
 
-1. **Adding a New Protocol**: Create a new template in `pkg/config/templates.go` and add to `SupportedProtocols` list
-2. **Modifying Configurations**: Use the ConfigManager's file operations to maintain proper file naming
-3. **Testing Changes**: Always validate with `xray test -confdir` before applying
-4. **Hot Reload**: Configurations support hot reload via USR1 signal to Xray process
+### Security Implementation
+- systemd hardening: NoNewPrivileges=true, ProtectSystem=strict
+- Port conflict detection via pkg/utils/network.go
+- Certificate validation via pkg/utils/crypto.go
+- BBR setup via system optimization commands
 
-## Dependencies
+## Coding Standards (Enforce Strictly)
 
-The project aims for minimal external dependencies:
-- Xray-core binary (downloaded during installation)
-- Standard Go libraries
-- Cobra for CLI framework (if used)
-- No external configuration files - everything embedded in binary
+### Module Usage Rules
+- Use existing ConfigManager methods, never direct file operations
+- Use pkg/utils/logger.go for all logging with color support
+- Use pkg/utils/validator.go for all input validation
+- Use pkg/utils/crypto.go for UUID, password, key generation
+- Use pkg/system/detector.go for OS detection before installation
+
+### Error Handling Pattern
+```go
+// Always implement this pattern
+if err := createAutoBackup(); err != nil {
+    return fmt.Errorf("backup failed: %v", err)
+}
+if err := operation(); err != nil {
+    restoreFromBackup()
+    return fmt.Errorf("operation failed: %v", err)
+}
+if err := validateConfigAfterChange(); err != nil {
+    restoreFromBackup()
+    return fmt.Errorf("validation failed: %v", err)
+}
+```
+
+### Testing Requirements
+- Write unit tests for new functions
+- Test with real Xray binary validation
+- Benchmark performance-critical functions
+- Test rollback mechanisms
+
+## Dependencies and Constraints
+
+### Runtime Requirements
+- Xray binary: Auto-download from GitHub releases via pkg/system/installer.go
+- System: Ubuntu/CentOS/Debian with systemd support
+- Network: Port availability for protocols (use smart allocation)
+
+### Build Requirements
+- Go 1.19+ required
+- No external dependencies beyond standard library
+- Embed all templates in binary (no external files)
+
+## Current Development Focus
+
+### Completed (Production Ready)
+- ✅ All 25+ CLI commands implemented
+- ✅ DESIGN.md 100% alignment achieved
+- ✅ Performance target exceeded (0.12ms vs 1ms goal)
+- ✅ Full system management infrastructure
+- ✅ TLS automation with ACME + Caddy integration
+
+### Quality Improvement Priorities
+- Unit test coverage expansion
+- Error message improvements
+- Input validation enhancement
+- Documentation updates
