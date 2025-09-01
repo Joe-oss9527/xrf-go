@@ -680,6 +680,13 @@ func (cm *ConfigManager) RestoreConfig(backupPath string) error {
 		}
 	}
 
+	// 清理临时备份文件（恢复成功后）
+	if currentBackupPath != "" {
+		if err := os.Remove(currentBackupPath); err != nil {
+			utils.Warning("Failed to cleanup temporary backup file: %v", err)
+		}
+	}
+
 	return nil
 }
 
