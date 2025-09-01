@@ -20,22 +20,119 @@ func ValidatePort(port int) error {
 }
 
 func IsPortAvailable(port int) bool {
-	address := fmt.Sprintf(":%d", port)
-	listener, err := net.Listen("tcp", address)
+	if port < 1 || port > 65535 {
+		return false
+	}
+	
+	// 检查 TCP 端口
+	tcpAddr := fmt.Sprintf(":%d", port)
+	listener, err := net.Listen("tcp", tcpAddr)
 	if err != nil {
 		return false
 	}
 	listener.Close()
+	
+	// 检查 UDP 端口
+	udpAddr := fmt.Sprintf(":%d", port)
+	conn, err := net.ListenPacket("udp", udpAddr)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	
 	return true
 }
 
-func FindAvailablePort(startPort int) int {
-	for port := startPort; port <= 65535; port++ {
+func FindAvailablePort(startPort, endPort int) (int, error) {
+	if endPort == 0 {
+		// 兼容旧版本，endPort为0时搜索到65535
+		endPort = 65535
+	}
+	
+	if startPort < 1 || startPort > 65535 || endPort < 1 || endPort > 65535 || startPort > endPort {
+		return 0, fmt.Errorf("invalid port range: %d-%d", startPort, endPort)
+	}
+	
+	for port := startPort; port <= endPort; port++ {
 		if IsPortAvailable(port) {
-			return port
+			return port, nil
 		}
 	}
-	return 0
+	
+	return 0, fmt.Errorf("no available ports in range %d-%d", startPort, endPort)
+}
+
+// CheckPortConflict 检查端口冲突
+func CheckPortConflict(port int, usedPorts []int) bool {
+	for _, usedPort := range usedPorts {
+		if port == usedPort {
+			return true
+		}
+	}
+	return false
+}
+
+// SuggestPort 智能端口建议
+func SuggestPort(protocolType string, preferredPort int) (int, error) {
+	// 如果指定了端口且可用，直接使用
+	if preferredPort != 0 {
+		if IsPortAvailable(preferredPort) {
+			return preferredPort, nil
+		}
+		return 0, fmt.Errorf("port %d is not available", preferredPort)
+	}
+	
+	// 根据协议类型建议默认端口范围
+	var startPort, endPort int
+	
+	switch protocolType {
+	case "vless-reality", "vr", "VLESS-REALITY":
+		// REALITY 推荐使用 443 或 80
+		if IsPortAvailable(443) {
+			return 443, nil
+		}
+		if IsPortAvailable(80) {
+			return 80, nil
+		}
+		startPort, endPort = 40000, 50000
+	case "vmess", "vless-ws", "trojan-ws", "mw", "vw", "tw", "VMess-WebSocket-TLS", "VLESS-WebSocket-TLS", "Trojan-WebSocket-TLS":
+		// WebSocket 类推荐使用 80, 443 或高端口
+		if IsPortAvailable(80) {
+			return 80, nil
+		}
+		if IsPortAvailable(443) {
+			return 443, nil
+		}
+		startPort, endPort = 30000, 40000
+	case "shadowsocks", "ss", "ss2022", "Shadowsocks", "Shadowsocks-2022":
+		// Shadowsocks 推荐使用高端口
+		startPort, endPort = 50000, 60000
+	case "vless-hu", "hu", "VLESS-HTTPUpgrade":
+		// HTTPUpgrade 推荐使用 80 或高端口
+		if IsPortAvailable(80) {
+			return 80, nil
+		}
+		startPort, endPort = 30000, 40000
+	default:
+		// 默认高端口范围
+		startPort, endPort = 10000, 20000
+	}
+	
+	return FindAvailablePort(startPort, endPort)
+}
+
+// GetPortsByProtocol 根据协议获取推荐端口列表
+func GetPortsByProtocol(protocolType string) []int {
+	switch protocolType {
+	case "vless-reality", "vr", "VLESS-REALITY":
+		return []int{443, 80, 8443, 2053, 2083, 2087, 2096}
+	case "vmess", "vless-ws", "trojan-ws", "mw", "vw", "tw", "vless-hu", "hu", "VMess-WebSocket-TLS", "VLESS-WebSocket-TLS", "Trojan-WebSocket-TLS", "VLESS-HTTPUpgrade":
+		return []int{80, 443, 8080, 8443, 2052, 2053, 2082, 2083, 2086, 2087, 2095, 2096}
+	case "shadowsocks", "ss", "ss2022", "Shadowsocks", "Shadowsocks-2022":
+		return []int{1080, 8388, 9000, 50000, 51000, 52000}
+	default:
+		return []int{8080, 8443, 9000, 10000, 20000}
+	}
 }
 
 func ValidateDomain(domain string) error {

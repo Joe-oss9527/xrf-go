@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/yourusername/xrf-go/pkg/config"
+	"github.com/yourusername/xrf-go/pkg/system"
 	"github.com/yourusername/xrf-go/pkg/utils"
 )
 
@@ -17,6 +18,9 @@ var (
 	verbose   bool
 	noColor   bool
 	configMgr *config.ConfigManager
+	detector  *system.Detector
+	installer *system.Installer
+	serviceMgr *system.ServiceManager
 )
 
 func main() {
@@ -41,6 +45,12 @@ func main() {
 			if noColor {
 				utils.DisableColor()
 			}
+			
+			// 初始化系统组件
+			detector = system.NewDetector()
+			installer = system.NewInstaller(detector)
+			installer.SetVerbose(verbose)
+			serviceMgr = system.NewServiceManager(detector)
 			
 			// 初始化配置管理器
 			configMgr = config.NewConfigManager(confDir)
@@ -67,6 +77,7 @@ func main() {
 		createStatusCommand(),
 		createReloadCommand(),
 		createTestCommand(),
+		createCheckPortCommand(),
 		createBackupCommand(),
 		createRestoreCommand(),
 		createURLCommand(),
@@ -182,26 +193,83 @@ func createInstallCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			utils.PrintSection("XRF-Go 安装程序")
 			
+			// 检查系统支持
+			if supported, reason := detector.IsSupported(); !supported {
+				return fmt.Errorf("系统不支持: %s", reason)
+			}
+			
+			// 显示系统信息
+			if verbose {
+				detector.PrintSystemInfo()
+			}
+			
+			// 安装 Xray
+			utils.PrintInfo("正在安装 Xray...")
+			if err := installer.InstallXray(); err != nil {
+				return fmt.Errorf("Xray 安装失败: %w", err)
+			}
+			
+			// 安装并启动服务
+			utils.PrintInfo("配置 Xray 服务...")
+			if err := serviceMgr.InstallService(); err != nil {
+				return fmt.Errorf("服务安装失败: %w", err)
+			}
+			
+			// 初始化配置管理器
+			utils.PrintInfo("初始化配置...")
+			if err := configMgr.Initialize(); err != nil {
+				return fmt.Errorf("配置初始化失败: %w", err)
+			}
+			
+			// 添加指定的协议
 			if len(protocols) == 0 {
 				protocols = []string{"vless-reality"}
 			}
 			
-			// TODO: 实现完整的安装逻辑
-			utils.PrintInfo("正在安装 Xray 服务...")
-			utils.PrintInfo("协议: %s", strings.Join(protocols, ", "))
-			if domain != "" {
-				utils.PrintInfo("域名: %s", domain)
-			}
-			if port != 0 {
-				utils.PrintInfo("端口: %d", port)
+			for i, protocolType := range protocols {
+				utils.PrintInfo("添加协议 %d/%d: %s", i+1, len(protocols), protocolType)
+				
+				options := make(map[string]interface{})
+				if domain != "" {
+					options["domain"] = domain
+					options["host"] = domain
+				}
+				if port != 0 {
+					options["port"] = port + i // 为多协议分配不同端口
+				}
+				
+				tag := fmt.Sprintf("%s_%d", strings.ReplaceAll(protocolType, "-", "_"), i+1)
+				if len(protocols) == 1 {
+					tag = strings.ReplaceAll(protocolType, "-", "_")
+				}
+				
+				if err := configMgr.AddProtocol(protocolType, tag, options); err != nil {
+					utils.PrintWarning("添加协议 %s 失败: %v", protocolType, err)
+					continue
+				}
+				
+				utils.PrintSuccess("协议 %s 添加成功", protocolType)
 			}
 			
-			// 初始化配置管理器
-			if err := configMgr.Initialize(); err != nil {
-				return fmt.Errorf("初始化配置失败: %w", err)
+			// 验证配置
+			utils.PrintInfo("验证配置...")
+			if err := serviceMgr.ValidateConfig(); err != nil {
+				return fmt.Errorf("配置验证失败: %w", err)
 			}
 			
-			utils.PrintSuccess("Xray 服务安装完成")
+			// 启动服务
+			utils.PrintInfo("启动 Xray 服务...")
+			if err := serviceMgr.StartService(); err != nil {
+				return fmt.Errorf("启动服务失败: %w", err)
+			}
+			
+			utils.PrintSuccess("🎉 XRF-Go 安装完成!")
+			utils.PrintInfo("🔧 管理命令:")
+			utils.PrintInfo("  xrf list                 # 查看协议列表")
+			utils.PrintInfo("  xrf add [protocol]       # 添加新协议")
+			utils.PrintInfo("  xrf status               # 查看服务状态")
+			utils.PrintInfo("  xrf logs                 # 查看运行日志")
+			
 			return nil
 		},
 	}
@@ -223,6 +291,7 @@ func createAddCommand() *cobra.Command {
 		password string
 		uuid     string
 		tag      string
+		noReload bool
 	)
 
 	cmd := &cobra.Command{
@@ -297,6 +366,15 @@ func createAddCommand() *cobra.Command {
 				utils.PrintKeyValue("路径", path)
 			}
 			
+			// 自动热重载配置
+			if !noReload {
+				utils.PrintInfo("自动热重载配置...")
+				if err := configMgr.ReloadConfig(); err != nil {
+					utils.PrintWarning("热重载失败: %v", err)
+					utils.PrintInfo("请手动执行 'xrf reload' 重载配置")
+				}
+			}
+			
 			return nil
 		},
 	}
@@ -307,6 +385,7 @@ func createAddCommand() *cobra.Command {
 	cmd.Flags().StringVar(&password, "password", "", "密码")
 	cmd.Flags().StringVar(&uuid, "uuid", "", "UUID")
 	cmd.Flags().StringVar(&tag, "tag", "", "配置标签")
+	cmd.Flags().BoolVar(&noReload, "no-reload", false, "跳过自动热重载")
 
 	return cmd
 }
@@ -354,6 +433,8 @@ func createListCommand() *cobra.Command {
 }
 
 func createRemoveCommand() *cobra.Command {
+	var noReload bool
+	
 	cmd := &cobra.Command{
 		Use:   "remove [tag]",
 		Short: "删除协议配置",
@@ -370,10 +451,21 @@ func createRemoveCommand() *cobra.Command {
 			}
 			
 			utils.PrintSuccess("协议配置 %s 删除成功", tag)
+			
+			// 自动热重载配置
+			if !noReload {
+				utils.PrintInfo("自动热重载配置...")
+				if err := configMgr.ReloadConfig(); err != nil {
+					utils.PrintWarning("热重载失败: %v", err)
+					utils.PrintInfo("请手动执行 'xrf reload' 重载配置")
+				}
+			}
+			
 			return nil
 		},
 	}
-
+	
+	cmd.Flags().BoolVar(&noReload, "no-reload", false, "跳过自动热重载")
 	return cmd
 }
 
@@ -546,10 +638,7 @@ func createStartCommand() *cobra.Command {
 		Use:   "start",
 		Short: "启动 Xray 服务",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			utils.PrintInfo("启动 Xray 服务...")
-			// TODO: 实现服务启动逻辑
-			utils.PrintWarning("服务管理功能尚未实现")
-			return nil
+			return serviceMgr.StartService()
 		},
 	}
 }
@@ -559,10 +648,7 @@ func createStopCommand() *cobra.Command {
 		Use:   "stop",
 		Short: "停止 Xray 服务",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			utils.PrintInfo("停止 Xray 服务...")
-			// TODO: 实现服务停止逻辑
-			utils.PrintWarning("服务管理功能尚未实现")
-			return nil
+			return serviceMgr.StopService()
 		},
 	}
 }
@@ -572,10 +658,7 @@ func createRestartCommand() *cobra.Command {
 		Use:   "restart",
 		Short: "重启 Xray 服务",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			utils.PrintInfo("重启 Xray 服务...")
-			// TODO: 实现服务重启逻辑
-			utils.PrintWarning("服务管理功能尚未实现")
-			return nil
+			return serviceMgr.RestartService()
 		},
 	}
 }
@@ -585,10 +668,7 @@ func createStatusCommand() *cobra.Command {
 		Use:   "status",
 		Short: "查看服务状态",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			utils.PrintSection("Xray 服务状态")
-			// TODO: 实现服务状态查询
-			utils.PrintWarning("服务状态查询功能尚未实现")
-			return nil
+			return serviceMgr.PrintServiceStatus()
 		},
 	}
 }
@@ -597,11 +677,19 @@ func createReloadCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "reload",
 		Short: "热重载配置",
+		Long: `热重载 Xray 配置文件，无需重启服务。
+
+该命令会：
+1. 验证配置文件的正确性
+2. 向运行中的 Xray 进程发送 USR1 信号
+3. Xray 自动重新加载配置
+
+注意: 仅对配置文件的修改生效，不会重新加载二进制文件或系统服务配置。
+
+示例:
+  xrf reload    # 热重载当前配置`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			utils.PrintInfo("重载配置...")
-			// TODO: 实现配置热重载
-			utils.PrintWarning("配置热重载功能尚未实现")
-			return nil
+			return configMgr.ReloadConfig()
 		},
 	}
 }
@@ -611,17 +699,129 @@ func createTestCommand() *cobra.Command {
 		Use:   "test",
 		Short: "验证配置文件",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			utils.PrintSection("配置验证")
+			return serviceMgr.ValidateConfig()
+		},
+	}
+}
+
+func createCheckPortCommand() *cobra.Command {
+	var (
+		checkRange string
+		protocol   string
+		suggest    bool
+	)
+	
+	cmd := &cobra.Command{
+		Use:   "check-port [port]",
+		Short: "检查端口可用性",
+		Long: `检查指定端口是否可用，支持端口范围检查和协议建议。
+
+示例:
+  xrf check-port 443                    # 检查单个端口
+  xrf check-port --range 8000-9000      # 检查端口范围
+  xrf check-port --protocol vless-reality --suggest  # 获取协议端口建议`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			utils.PrintSection("端口检查")
 			
-			if err := configMgr.ValidateConfig(); err != nil {
-				utils.PrintError("配置验证失败: %v", err)
-				return err
+			if suggest && protocol != "" {
+				// 获取协议建议端口
+				suggestedPorts := utils.GetPortsByProtocol(protocol)
+				utils.PrintInfo("协议 %s 推荐端口:", protocol)
+				
+				availablePorts := []int{}
+				for _, port := range suggestedPorts {
+					if utils.IsPortAvailable(port) {
+						availablePorts = append(availablePorts, port)
+						fmt.Printf("  %s %d - 可用\n", utils.BoldGreen("✓"), port)
+					} else {
+						fmt.Printf("  %s %d - 已占用\n", utils.BoldRed("✗"), port)
+					}
+				}
+				
+				if len(availablePorts) > 0 {
+					utils.PrintSuccess("建议使用端口: %d", availablePorts[0])
+				} else {
+					utils.PrintWarning("所有推荐端口均已占用，寻找替代端口...")
+					if altPort, err := utils.SuggestPort(protocol, 0); err == nil {
+						utils.PrintSuccess("建议替代端口: %d", altPort)
+					} else {
+						utils.PrintError("无法找到可用端口: %v", err)
+					}
+				}
+				return nil
 			}
 			
-			utils.PrintSuccess("配置验证通过")
+			if checkRange != "" {
+				// 检查端口范围
+				parts := strings.Split(checkRange, "-")
+				if len(parts) != 2 {
+					return fmt.Errorf("端口范围格式错误，应为: start-end")
+				}
+				
+				startPort, err := strconv.Atoi(parts[0])
+				if err != nil {
+					return fmt.Errorf("起始端口无效: %s", parts[0])
+				}
+				
+				endPort, err := strconv.Atoi(parts[1])
+				if err != nil {
+					return fmt.Errorf("结束端口无效: %s", parts[1])
+				}
+				
+				utils.PrintInfo("检查端口范围: %d-%d", startPort, endPort)
+				
+				availableCount := 0
+				for port := startPort; port <= endPort; port++ {
+					if utils.IsPortAvailable(port) {
+						availableCount++
+					}
+				}
+				
+				totalPorts := endPort - startPort + 1
+				utils.PrintInfo("总端口数: %d", totalPorts)
+				utils.PrintInfo("可用端口数: %d", availableCount)
+				utils.PrintInfo("已占用端口数: %d", totalPorts - availableCount)
+				
+				if availableCount > 0 {
+					if availablePort, err := utils.FindAvailablePort(startPort, endPort); err == nil {
+						utils.PrintSuccess("第一个可用端口: %d", availablePort)
+					}
+				}
+				
+				return nil
+			}
+			
+			if len(args) == 0 {
+				return fmt.Errorf("请指定要检查的端口或使用 --range 参数")
+			}
+			
+			// 检查单个端口
+			port, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("端口格式错误: %s", args[0])
+			}
+			
+			if port < 1 || port > 65535 {
+				return fmt.Errorf("端口范围必须在 1-65535 之间")
+			}
+			
+			utils.PrintInfo("检查端口: %d", port)
+			
+			if utils.IsPortAvailable(port) {
+				utils.PrintSuccess("端口 %d 可用", port)
+			} else {
+				utils.PrintError("端口 %d 已被占用", port)
+			}
+			
 			return nil
 		},
 	}
+	
+	cmd.Flags().StringVar(&checkRange, "range", "", "检查端口范围 (格式: start-end)")
+	cmd.Flags().StringVar(&protocol, "protocol", "", "协议类型 (配合 --suggest 使用)")
+	cmd.Flags().BoolVar(&suggest, "suggest", false, "获取协议端口建议")
+	
+	return cmd
 }
 
 func createBackupCommand() *cobra.Command {

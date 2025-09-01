@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"os/exec"
 	"strings"
 	
 	"github.com/google/uuid"
@@ -129,4 +130,10 @@ func ParseCertificate(certPEM []byte) (*x509.Certificate, error) {
 	}
 	
 	return cert, nil
+}
+
+// ExecuteCommand 执行系统命令
+func ExecuteCommand(name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	return cmd.Output()
 }

@@ -256,6 +256,41 @@ func (cm *ConfigManager) ValidateConfig() error {
 	return utils.ValidateXrayConfDir(cm.confDir)
 }
 
+// ReloadConfig 热重载配置（发送USR1信号到Xray进程）
+func (cm *ConfigManager) ReloadConfig() error {
+	utils.PrintInfo("重载 Xray 配置...")
+	
+	// 首先验证配置
+	if err := cm.ValidateConfig(); err != nil {
+		return fmt.Errorf("配置验证失败，取消重载: %w", err)
+	}
+	
+	// 查找 Xray 进程
+	cmd := exec.Command("pgrep", "-f", "xray.*confdir")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("未找到 Xray 进程，请检查服务状态")
+	}
+	
+	pids := strings.Fields(strings.TrimSpace(string(output)))
+	if len(pids) == 0 {
+		return fmt.Errorf("未找到运行中的 Xray 进程")
+	}
+	
+	// 向所有 Xray 进程发送 USR1 信号
+	for _, pid := range pids {
+		killCmd := exec.Command("kill", "-USR1", pid)
+		if err := killCmd.Run(); err != nil {
+			utils.PrintWarning("向进程 %s 发送 USR1 信号失败: %v", pid, err)
+		} else {
+			utils.PrintSuccess("向进程 %s 发送热重载信号", pid)
+		}
+	}
+	
+	utils.PrintSuccess("配置热重载完成")
+	return nil
+}
+
 // GenerateShareURL 生成协议分享链接
 func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 	info, err := cm.GetProtocolInfo(tag)
@@ -574,7 +609,7 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 		Tag: tag,
 	}
 	
-	// 设置端口
+	// 设置端口（包含端口冲突检查）
 	if port, exists := options["port"]; exists {
 		if portInt, ok := port.(int); ok {
 			data.Port = portInt
@@ -584,8 +619,28 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 			}
 		}
 	}
+	
+	// 智能端口分配
 	if data.Port == 0 {
-		data.Port = protocol.DefaultPort
+		// 检查默认端口是否可用
+		if utils.IsPortAvailable(protocol.DefaultPort) {
+			data.Port = protocol.DefaultPort
+		} else {
+			// 建议替代端口
+			suggestedPort, err := utils.SuggestPort(protocol.Name, 0)
+			if err != nil {
+				utils.PrintWarning("无法找到可用端口: %v", err)
+				data.Port = protocol.DefaultPort // 回退到默认端口
+			} else {
+				data.Port = suggestedPort
+				utils.PrintInfo("端口 %d 已被占用，自动分配端口 %d", protocol.DefaultPort, suggestedPort)
+			}
+		}
+	} else {
+		// 验证指定端口是否可用
+		if !utils.IsPortAvailable(data.Port) {
+			return data, fmt.Errorf("端口 %d 已被占用，请选择其他端口", data.Port)
+		}
 	}
 	
 	// 生成 UUID
