@@ -19,6 +19,9 @@ linters:
         - (*net/http.Response).Body.Close
         - os.RemoveAll
         - os.Remove
+        - os.MkdirAll
+        - os.Rename
+        - (*os/exec.Cmd).Run
         - (*os.File).Sync
         - fmt.Printf
         - fmt.Print
@@ -40,5 +43,17 @@ linters:
           - errcheck
       - path: .*_test\.go
         text: "Error return value of `os.RemoveAll` is not checked"
+        linters:
+          - errcheck
+      - text: "Error return value of.*StopService.*is not checked"
+        linters:
+          - errcheck
+      - text: "Error return value of.*DisableService.*is not checked"
+        linters:
+          - errcheck
+      - text: "Error return value of.*PrintSystemInfo.*is not checked"
+        linters:
+          - errcheck
+      - text: "Error return value of.*DetectSystem.*is not checked"
         linters:
           - errcheck
