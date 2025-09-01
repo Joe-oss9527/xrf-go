@@ -43,9 +43,18 @@ func TestRestoreConfig_BackupFileCleanup(t *testing.T) {
 	}
 
 	// 记录恢复前当前目录的备份文件数量
-	oldWorkDir, _ := os.Getwd()
-	os.Chdir("/tmp")
-	defer os.Chdir(oldWorkDir)
+	oldWorkDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	if err := os.Chdir("/tmp"); err != nil {
+		t.Fatalf("Failed to change directory to /tmp: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWorkDir); err != nil {
+			t.Errorf("Failed to restore working directory: %v", err)
+		}
+	}()
 
 	beforeFiles, _ := filepath.Glob("xrf-current-backup-*.tar.gz")
 	beforeCount := len(beforeFiles)
