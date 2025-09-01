@@ -154,7 +154,7 @@ func TestPerformanceTarget(t *testing.T) {
 		if protocol.name == "vless-ws" || protocol.name == "trojan-ws" {
 			targetDuration = 200 * time.Millisecond // TLS协议首次需要证书生成
 		}
-		
+
 		if duration > targetDuration {
 			t.Errorf("Protocol %s took %v, exceeds %v target", protocol.name, duration, targetDuration)
 		} else {

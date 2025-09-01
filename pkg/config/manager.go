@@ -880,13 +880,13 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 	// TLS 设置
 	if protocol.RequiresTLS {
 		data.Security = "tls"
-		
+
 		// 测试环境证书处理
 		if IsTestEnvironment() {
 			// 检查是否手动提供了证书
 			_, hasCert := options["certFile"]
 			_, hasKey := options["keyFile"]
-			
+
 			if !hasCert && !hasKey {
 				// 使用测试证书
 				testCert, err := GetTestCertificate()

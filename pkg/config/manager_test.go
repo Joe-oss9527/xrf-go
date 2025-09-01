@@ -14,16 +14,20 @@ import (
 func TestMain(m *testing.M) {
 	// 设置测试环境
 	os.Setenv("XRF_TEST_MODE", "1")
-	
+
 	// 运行测试
 	code := m.Run()
-	
+
 	// 清理测试证书
-	CleanupTestCertificate()
-	
+	if err := CleanupTestCertificate(); err != nil {
+		// 清理失败不应该阻止程序退出，只记录错误
+		// 在测试环境中这通常不是致命错误
+		_ = err
+	}
+
 	// 清理环境变量
 	os.Unsetenv("XRF_TEST_MODE")
-	
+
 	os.Exit(code)
 }
 
@@ -200,7 +204,7 @@ func TestMultiProtocolSupport(t *testing.T) {
 			if protocol.name == "vless-ws" || protocol.name == "trojan-ws" {
 				targetDuration = 100 * time.Millisecond // TLS协议需要证书生成
 			}
-			
+
 			if duration > targetDuration {
 				t.Errorf("Protocol %s took %v, exceeds %v target", protocol.name, duration, targetDuration)
 			}
