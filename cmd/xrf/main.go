@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yourusername/xrf-go/pkg/config"
 	"github.com/yourusername/xrf-go/pkg/system"
+	"github.com/yourusername/xrf-go/pkg/tls"
 	"github.com/yourusername/xrf-go/pkg/utils"
 )
 
@@ -21,6 +22,8 @@ var (
 	detector   *system.Detector
 	installer  *system.Installer
 	serviceMgr *system.ServiceManager
+	acmeMgr    *tls.ACMEManager
+	caddyMgr   *tls.CaddyManager
 )
 
 func main() {
@@ -84,6 +87,8 @@ func main() {
 		createQRCommand(),
 		createLogsCommand(),
 		createVersionCommand(),
+		createTLSCommand(),
+		createCaddyCommand(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -1098,6 +1103,401 @@ func createVersionCommand() *cobra.Command {
 			utils.PrintKeyValue("XRF-Go 版本", "v1.0.0-dev")
 			utils.PrintKeyValue("构建时间", "未设置")
 			utils.PrintKeyValue("Go 版本", "1.23+")
+			return nil
+		},
+	}
+}
+
+func createTLSCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "tls",
+		Short: "TLS 证书管理",
+		Long: `管理 Let's Encrypt 自动证书申请和续期。
+
+支持的操作:
+  • request   - 申请证书
+  • renew     - 续期证书  
+  • status    - 查看证书状态
+  • auto-renew - 设置自动续期`,
+	}
+
+	cmd.AddCommand(
+		createTLSRequestCommand(),
+		createTLSRenewCommand(), 
+		createTLSStatusCommand(),
+		createTLSAutoRenewCommand(),
+	)
+
+	return cmd
+}
+
+func createTLSRequestCommand() *cobra.Command {
+	var (
+		email   string
+		staging bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "request [domain]",
+		Short: "申请 Let's Encrypt 证书",
+		Long: `为指定域名申请 Let's Encrypt SSL/TLS 证书。
+
+示例:
+  xrf tls request example.com --email admin@example.com
+  xrf tls request test.com --email admin@test.com --staging`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			domain := args[0]
+
+			if email == "" {
+				return fmt.Errorf("email is required")
+			}
+
+			utils.PrintSection("申请 Let's Encrypt 证书")
+			utils.PrintInfo("域名: %s", domain)
+			utils.PrintInfo("邮箱: %s", email)
+
+			// 初始化 ACME 管理器
+			acmeMgr = tls.NewACMEManager(email)
+			if staging {
+				acmeMgr.SetStagingMode()
+				utils.PrintInfo("使用 Let's Encrypt 测试环境")
+			}
+
+			// 初始化
+			if err := acmeMgr.Initialize(); err != nil {
+				return fmt.Errorf("failed to initialize ACME manager: %w", err)
+			}
+
+			// 申请证书
+			if err := acmeMgr.ObtainCertificate([]string{domain}); err != nil {
+				return fmt.Errorf("failed to obtain certificate: %w", err)
+			}
+
+			utils.PrintSuccess("证书申请完成")
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&email, "email", "", "ACME 账户邮箱")
+	cmd.Flags().BoolVar(&staging, "staging", false, "使用 Let's Encrypt 测试环境")
+	cmd.MarkFlagRequired("email")
+
+	return cmd
+}
+
+func createTLSRenewCommand() *cobra.Command {
+	var (
+		email string
+		all   bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "renew [domain]",
+		Short: "续期证书",
+		Long: `手动续期指定域名的证书，或续期所有即将过期的证书。
+
+示例:
+  xrf tls renew example.com --email admin@example.com
+  xrf tls renew --all --email admin@example.com`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if email == "" {
+				return fmt.Errorf("email is required")
+			}
+
+			// 初始化 ACME 管理器
+			acmeMgr = tls.NewACMEManager(email)
+			if err := acmeMgr.Initialize(); err != nil {
+				return fmt.Errorf("failed to initialize ACME manager: %w", err)
+			}
+
+			if all {
+				utils.PrintSection("续期所有即将过期的证书")
+				return acmeMgr.CheckAndRenew()
+			}
+
+			if len(args) != 1 {
+				return fmt.Errorf("domain is required when --all is not specified")
+			}
+
+			domain := args[0]
+			utils.PrintSection("续期证书")
+			utils.PrintInfo("域名: %s", domain)
+
+			return acmeMgr.RenewCertificate(domain)
+		},
+	}
+
+	cmd.Flags().StringVar(&email, "email", "", "ACME 账户邮箱")
+	cmd.Flags().BoolVar(&all, "all", false, "续期所有即将过期的证书")
+	cmd.MarkFlagRequired("email")
+
+	return cmd
+}
+
+func createTLSStatusCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "查看证书状态",
+		Long:  `查看所有已申请证书的状态信息，包括过期时间等。`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			utils.PrintSection("TLS 证书状态")
+			
+			// 这里可以实现证书状态查看逻辑
+			// 扫描证书目录并显示证书信息
+			utils.PrintInfo("功能开发中...")
+			
+			return nil
+		},
+	}
+}
+
+func createTLSAutoRenewCommand() *cobra.Command {
+	var (
+		email  string
+		enable bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "auto-renew",
+		Short: "设置自动续期",
+		Long: `启用或禁用证书自动续期功能。
+
+示例:
+  xrf tls auto-renew --enable --email admin@example.com`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if email == "" {
+				return fmt.Errorf("email is required")
+			}
+
+			// 初始化 ACME 管理器
+			acmeMgr = tls.NewACMEManager(email)
+			
+			if enable {
+				utils.PrintSection("启用自动续期")
+				return acmeMgr.SetupAutoRenewal()
+			}
+
+			utils.PrintInfo("自动续期功能管理")
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&email, "email", "", "ACME 账户邮箱")
+	cmd.Flags().BoolVar(&enable, "enable", false, "启用自动续期")
+	cmd.MarkFlagRequired("email")
+
+	return cmd
+}
+
+func createCaddyCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "caddy",
+		Short: "Caddy 反向代理管理",
+		Long: `管理 Caddy 反向代理服务器，提供 TLS 终止和网站伪装功能。
+
+支持的操作:
+  • install - 安装 Caddy
+  • config  - 配置反向代理
+  • mask    - 设置伪装网站
+  • status  - 查看服务状态
+  • start   - 启动服务
+  • stop    - 停止服务`,
+	}
+
+	cmd.AddCommand(
+		createCaddyInstallCommand(),
+		createCaddyConfigCommand(),
+		createCaddyMaskCommand(),
+		createCaddyStatusCommand(),
+		createCaddyStartCommand(),
+		createCaddyStopCommand(),
+	)
+
+	return cmd
+}
+
+func createCaddyInstallCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "install",
+		Short: "安装 Caddy",
+		Long:  `下载并安装 Caddy 服务器，创建 systemd 服务配置。`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			utils.PrintSection("安装 Caddy")
+
+			// 初始化 Caddy 管理器
+			caddyMgr = tls.NewCaddyManager()
+
+			// 安装 Caddy
+			if err := caddyMgr.InstallCaddy(); err != nil {
+				return fmt.Errorf("failed to install Caddy: %w", err)
+			}
+
+			utils.PrintSuccess("Caddy 安装完成")
+			return nil
+		},
+	}
+}
+
+func createCaddyConfigCommand() *cobra.Command {
+	var (
+		domain   string
+		upstream string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "config",
+		Short: "配置反向代理",
+		Long: `为指定域名配置 Caddy 反向代理。
+
+示例:
+  xrf caddy config --domain example.com --upstream localhost:8080`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if domain == "" {
+				return fmt.Errorf("domain is required")
+			}
+			if upstream == "" {
+				return fmt.Errorf("upstream is required")
+			}
+
+			utils.PrintSection("配置 Caddy 反向代理")
+			utils.PrintInfo("域名: %s", domain)
+			utils.PrintInfo("上游: %s", upstream)
+
+			// 初始化 Caddy 管理器
+			caddyMgr = tls.NewCaddyManager()
+
+			// 配置反向代理
+			if err := caddyMgr.ConfigureReverseProxy(domain, upstream); err != nil {
+				return fmt.Errorf("failed to configure reverse proxy: %w", err)
+			}
+
+			utils.PrintSuccess("反向代理配置完成")
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&domain, "domain", "", "域名")
+	cmd.Flags().StringVar(&upstream, "upstream", "", "上游服务器地址")
+	cmd.MarkFlagRequired("domain")
+	cmd.MarkFlagRequired("upstream")
+
+	return cmd
+}
+
+func createCaddyMaskCommand() *cobra.Command {
+	var (
+		domain   string
+		maskSite string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "mask",
+		Short: "设置伪装网站",
+		Long: `为指定域名设置伪装网站，反向代理到指定的网站。
+
+示例:
+  xrf caddy mask --domain example.com --site google.com`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if domain == "" {
+				return fmt.Errorf("domain is required")
+			}
+			if maskSite == "" {
+				return fmt.Errorf("mask site is required")
+			}
+
+			utils.PrintSection("设置伪装网站")
+			utils.PrintInfo("域名: %s", domain)
+			utils.PrintInfo("伪装网站: %s", maskSite)
+
+			// 初始化 Caddy 管理器
+			caddyMgr = tls.NewCaddyManager()
+
+			// 设置伪装网站
+			if err := caddyMgr.AddWebsiteMasquerade(domain, maskSite); err != nil {
+				return fmt.Errorf("failed to setup website masquerade: %w", err)
+			}
+
+			utils.PrintSuccess("伪装网站设置完成")
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&domain, "domain", "", "域名")
+	cmd.Flags().StringVar(&maskSite, "site", "", "伪装网站地址")
+	cmd.MarkFlagRequired("domain")
+	cmd.MarkFlagRequired("site")
+
+	return cmd
+}
+
+func createCaddyStatusCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "查看 Caddy 服务状态",
+		Long:  `查看 Caddy 服务的运行状态和配置信息。`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			utils.PrintSection("Caddy 服务状态")
+
+			// 初始化 Caddy 管理器
+			caddyMgr = tls.NewCaddyManager()
+
+			// 获取服务状态
+			status, err := caddyMgr.GetServiceStatus()
+			if err != nil {
+				return fmt.Errorf("failed to get service status: %w", err)
+			}
+
+			utils.PrintKeyValue("服务状态", status)
+			utils.PrintKeyValue("是否运行", func() string {
+				if caddyMgr.IsRunning() {
+					return "是"
+				}
+				return "否"
+			}())
+
+			return nil
+		},
+	}
+}
+
+func createCaddyStartCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "start",
+		Short: "启动 Caddy 服务",
+		Long:  `启动 Caddy 服务并启用自动启动。`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			utils.PrintSection("启动 Caddy 服务")
+
+			// 初始化 Caddy 管理器
+			caddyMgr = tls.NewCaddyManager()
+
+			// 启动服务
+			if err := caddyMgr.StartService(); err != nil {
+				return fmt.Errorf("failed to start Caddy service: %w", err)
+			}
+
+			return nil
+		},
+	}
+}
+
+func createCaddyStopCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "stop",
+		Short: "停止 Caddy 服务",
+		Long:  `停止 Caddy 服务。`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			utils.PrintSection("停止 Caddy 服务")
+
+			// 初始化 Caddy 管理器
+			caddyMgr = tls.NewCaddyManager()
+
+			// 停止服务
+			if err := caddyMgr.StopService(); err != nil {
+				return fmt.Errorf("failed to stop Caddy service: %w", err)
+			}
+
 			return nil
 		},
 	}

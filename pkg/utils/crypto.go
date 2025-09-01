@@ -1,7 +1,10 @@
 package utils
 
 import (
+	"crypto"
+	"crypto/ecdsa"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
@@ -130,6 +133,60 @@ func ParseCertificate(certPEM []byte) (*x509.Certificate, error) {
 	}
 
 	return cert, nil
+}
+
+// ParsePrivateKey 解析私钥
+func ParsePrivateKey(keyData []byte) (crypto.PrivateKey, error) {
+	block, _ := pem.Decode(keyData)
+	if block == nil {
+		return nil, fmt.Errorf("failed to parse private key PEM")
+	}
+
+	switch block.Type {
+	case "RSA PRIVATE KEY":
+		return x509.ParsePKCS1PrivateKey(block.Bytes)
+	case "PRIVATE KEY":
+		return x509.ParsePKCS8PrivateKey(block.Bytes)
+	case "EC PRIVATE KEY":
+		return x509.ParseECPrivateKey(block.Bytes)
+	default:
+		return nil, fmt.Errorf("unsupported private key type: %s", block.Type)
+	}
+}
+
+// EncodePrivateKey 编码私钥为 PEM 格式
+func EncodePrivateKey(privateKey crypto.PrivateKey) ([]byte, error) {
+	switch key := privateKey.(type) {
+	case *rsa.PrivateKey:
+		keyBytes := x509.MarshalPKCS1PrivateKey(key)
+		block := &pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: keyBytes,
+		}
+		return pem.EncodeToMemory(block), nil
+		
+	case *ecdsa.PrivateKey:
+		keyBytes, err := x509.MarshalECPrivateKey(key)
+		if err != nil {
+			return nil, err
+		}
+		block := &pem.Block{
+			Type:  "EC PRIVATE KEY",
+			Bytes: keyBytes,
+		}
+		return pem.EncodeToMemory(block), nil
+		
+	default:
+		keyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+		if err != nil {
+			return nil, err
+		}
+		block := &pem.Block{
+			Type:  "PRIVATE KEY",
+			Bytes: keyBytes,
+		}
+		return pem.EncodeToMemory(block), nil
+	}
 }
 
 // ExecuteCommand 执行系统命令
