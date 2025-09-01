@@ -29,8 +29,19 @@ jobs:
         go mod download
         go mod verify
     
+    - name: Install Xray for testing
+      run: |
+        # Download and install Xray for configuration validation in tests
+        XRAY_VERSION="v25.8.3"
+        wget -O /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-64.zip"
+        unzip -d /tmp /tmp/xray.zip
+        sudo cp /tmp/xray /usr/local/bin/
+        sudo chmod +x /usr/local/bin/xray
+        xray version
+    
     - name: Run tests
       run: |
+        export CGO_ENABLED=1
         go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
     
     - name: Upload coverage reports
