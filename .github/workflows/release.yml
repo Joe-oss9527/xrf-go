@@ -1,0 +1,179 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '>=1.23'
+        cache: true
+    
+    - name: Get version
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.tag }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/}
+        fi
+        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+        echo "Building version: ${VERSION}"
+    
+    - name: Run tests
+      run: |
+        go test -v ./...
+    
+    - name: Build Linux AMD64
+      env:
+        CGO_ENABLED: 0
+        GOOS: linux
+        GOARCH: amd64
+      run: |
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+        BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        GIT_COMMIT=$(git rev-parse --short HEAD)
+        
+        go build -trimpath \
+          -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
+          -o dist/xrf-linux-amd64 \
+          cmd/xrf/main.go
+        
+        # Create tar.gz archive
+        cd dist
+        tar -czf xrf-linux-amd64.tar.gz xrf-linux-amd64
+        rm xrf-linux-amd64
+        cd ..
+    
+    - name: Build Linux ARM64
+      env:
+        CGO_ENABLED: 0
+        GOOS: linux
+        GOARCH: arm64
+      run: |
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+        BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        GIT_COMMIT=$(git rev-parse --short HEAD)
+        
+        go build -trimpath \
+          -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
+          -o dist/xrf-linux-arm64 \
+          cmd/xrf/main.go
+        
+        # Create tar.gz archive
+        cd dist
+        tar -czf xrf-linux-arm64.tar.gz xrf-linux-arm64
+        rm xrf-linux-arm64
+        cd ..
+    
+    - name: Generate checksums
+      run: |
+        cd dist
+        sha256sum *.tar.gz > checksums.txt
+        cat checksums.txt
+        cd ..
+    
+    - name: Create Release Notes
+      id: release_notes
+      run: |
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+        
+        cat > dist/release-notes.md << EOF
+        # XRF-Go ${VERSION}
+        
+        ## 🚀 Downloads
+        
+        ### Linux 服务器版本
+        - **Linux AMD64** (x86_64): \`xrf-linux-amd64.tar.gz\` - 适用于大多数云服务器/VPS
+        - **Linux ARM64**: \`xrf-linux-arm64.tar.gz\` - 适用于ARM架构服务器
+        
+        ## 📦 快速安装
+        
+        ### 方式1: 使用安装脚本（推荐）
+        \`\`\`bash
+        curl -fsSL https://github.com/${{ github.repository }}/releases/download/${VERSION}/install.sh | bash
+        \`\`\`
+        
+        ### 方式2: 手动下载安装
+        \`\`\`bash
+        # AMD64
+        wget https://github.com/${{ github.repository }}/releases/download/${VERSION}/xrf-linux-amd64.tar.gz
+        tar -xzf xrf-linux-amd64.tar.gz
+        sudo mv xrf-linux-amd64 /usr/local/bin/xrf
+        sudo chmod +x /usr/local/bin/xrf
+        
+        # ARM64
+        wget https://github.com/${{ github.repository }}/releases/download/${VERSION}/xrf-linux-arm64.tar.gz
+        tar -xzf xrf-linux-arm64.tar.gz
+        sudo mv xrf-linux-arm64 /usr/local/bin/xrf
+        sudo chmod +x /usr/local/bin/xrf
+        \`\`\`
+        
+        ## ✅ 验证安装
+        \`\`\`bash
+        xrf --version
+        \`\`\`
+        
+        ## 📝 更新日志
+        
+        查看完整更新日志: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
+        
+        ## 🔐 校验和
+        
+        下载后请验证文件完整性:
+        \`\`\`bash
+        sha256sum -c checksums.txt
+        \`\`\`
+        
+        ---
+        
+        **文档**: [README.md](https://github.com/${{ github.repository }}/blob/main/README.md)
+        **问题反馈**: [Issues](https://github.com/${{ github.repository }}/issues)
+        EOF
+        
+        echo "Release notes created"
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.get_version.outputs.VERSION }}
+        name: XRF-Go ${{ steps.get_version.outputs.VERSION }}
+        body_path: dist/release-notes.md
+        draft: false
+        prerelease: false
+        files: |
+          dist/xrf-linux-amd64.tar.gz
+          dist/xrf-linux-arm64.tar.gz
+          dist/checksums.txt
+          scripts/install.sh
+        fail_on_unmatched_files: true
+        generate_release_notes: false
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-binaries
+        path: dist/*.tar.gz
+        retention-days: 7
