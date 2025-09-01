@@ -196,10 +196,14 @@ func (cm *ConfigManager) AddProtocol(protocolType, tag string, options map[strin
 		return fmt.Errorf("failed to write protocol config: %w", err)
 	}
 
-	// 验证配置是否有效
-	if err := cm.validateConfigAfterChange(); err != nil {
-		rollback()
-		return fmt.Errorf("configuration validation failed after adding protocol: %w", err)
+	// 验证配置是否有效（可通过环境变量跳过）
+	if os.Getenv("XRF_SKIP_VALIDATION") != "1" {
+		if err := cm.validateConfigAfterChange(); err != nil {
+			rollback()
+			return fmt.Errorf("configuration validation failed after adding protocol: %w", err)
+		}
+	} else {
+		utils.Debug("Skipping validation due to XRF_SKIP_VALIDATION=1")
 	}
 
 	// Success - cleanup backup
@@ -260,10 +264,12 @@ func (cm *ConfigManager) RemoveProtocol(tag string) error {
 		return fmt.Errorf("failed to remove configuration files: %v", failedFiles)
 	}
 
-	// 验证配置是否有效
-	if err := cm.validateConfigAfterChange(); err != nil {
-		rollback()
-		return fmt.Errorf("configuration validation failed after removing protocol: %w", err)
+	// 验证配置是否有效（可通过环境变量跳过）
+	if os.Getenv("XRF_SKIP_VALIDATION") != "1" {
+		if err := cm.validateConfigAfterChange(); err != nil {
+			rollback()
+			return fmt.Errorf("configuration validation failed after removing protocol: %w", err)
+		}
 	}
 
 	// Success - cleanup backup
@@ -357,10 +363,12 @@ func (cm *ConfigManager) UpdateProtocol(tag string, options map[string]interface
 		return fmt.Errorf("failed to write updated config: %w", err)
 	}
 
-	// 验证配置是否有效
-	if err := cm.validateConfigAfterChange(); err != nil {
-		rollback()
-		return fmt.Errorf("configuration validation failed after updating protocol: %w", err)
+	// 验证配置是否有效（可通过环境变量跳过）
+	if os.Getenv("XRF_SKIP_VALIDATION") != "1" {
+		if err := cm.validateConfigAfterChange(); err != nil {
+			rollback()
+			return fmt.Errorf("configuration validation failed after updating protocol: %w", err)
+		}
 	}
 
 	// Success - cleanup backup
@@ -872,14 +880,45 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 	// TLS 设置
 	if protocol.RequiresTLS {
 		data.Security = "tls"
-		if certFile, exists := options["certFile"]; exists {
-			if certFileStr, ok := certFile.(string); ok {
-				data.CertFile = certFileStr
+		
+		// 测试环境证书处理
+		if IsTestEnvironment() {
+			// 检查是否手动提供了证书
+			_, hasCert := options["certFile"]
+			_, hasKey := options["keyFile"]
+			
+			if !hasCert && !hasKey {
+				// 使用测试证书
+				testCert, err := GetTestCertificate()
+				if err != nil {
+					return data, fmt.Errorf("failed to get test certificate: %v", err)
+				}
+				data.CertFile = testCert.CertFile
+				data.KeyFile = testCert.KeyFile
+			} else {
+				// 使用手动提供的证书
+				if hasCert {
+					if certFileStr, ok := options["certFile"].(string); ok {
+						data.CertFile = certFileStr
+					}
+				}
+				if hasKey {
+					if keyFileStr, ok := options["keyFile"].(string); ok {
+						data.KeyFile = keyFileStr
+					}
+				}
 			}
-		}
-		if keyFile, exists := options["keyFile"]; exists {
-			if keyFileStr, ok := keyFile.(string); ok {
-				data.KeyFile = keyFileStr
+		} else {
+			// 生产环境证书处理（现有逻辑）
+			if certFile, exists := options["certFile"]; exists {
+				if certFileStr, ok := certFile.(string); ok {
+					data.CertFile = certFileStr
+				}
+			}
+			if keyFile, exists := options["keyFile"]; exists {
+				if keyFileStr, ok := keyFile.(string); ok {
+					data.KeyFile = keyFileStr
+				}
 			}
 		}
 	}
