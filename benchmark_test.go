@@ -40,9 +40,9 @@ func BenchmarkAddProtocol(b *testing.B) {
 			b.Errorf("AddProtocol failed: %v", err)
 		}
 		
-		// 验证是否超过500毫秒目标
-		if duration > 500*time.Millisecond {
-			b.Errorf("AddProtocol took %v, exceeds 500ms target", duration)
+		// 验证是否超过1毫秒目标
+		if duration > 1*time.Millisecond {
+			b.Errorf("AddProtocol took %v, exceeds 1ms target", duration)
 		}
 		
 		b.Logf("AddProtocol for %s took %v", tag, duration)
@@ -103,8 +103,8 @@ func BenchmarkConfigOperations(b *testing.B) {
 		totalDuration := addDuration + infoDuration + removeDuration
 		
 		// 验证总操作时间
-		if addDuration > 500*time.Millisecond {
-			b.Errorf("AddProtocol took %v, exceeds 500ms target", addDuration)
+		if addDuration > 1*time.Millisecond {
+			b.Errorf("AddProtocol took %v, exceeds 1ms target", addDuration)
 		}
 		
 		b.Logf("Operations for %s: add=%v, info=%v, remove=%v, total=%v", 
@@ -149,11 +149,11 @@ func TestPerformanceTarget(t *testing.T) {
 		
 		t.Logf("Protocol %s: %v", protocol.name, duration)
 		
-		// 验证500毫秒目标
-		if duration > 500*time.Millisecond {
-			t.Errorf("Protocol %s took %v, exceeds 500ms target", protocol.name, duration)
+		// 验证1毫秒目标
+		if duration > 1*time.Millisecond {
+			t.Errorf("Protocol %s took %v, exceeds 1ms target", protocol.name, duration)
 		} else {
-			t.Logf("✅ Protocol %s meets 500ms target (%v)", protocol.name, duration)
+			t.Logf("✅ Protocol %s meets 1ms target (%v)", protocol.name, duration)
 		}
 	}
 }
@@ -202,9 +202,9 @@ func BenchmarkWithHotReload(b *testing.B) {
 		b.Logf("Add+Validate for %s: add=%v, validate=%v, total=%v", 
 			tag, addDuration, validateDuration, totalDuration)
 		
-		// 验证添加操作本身是否满足500毫秒目标
-		if addDuration > 500*time.Millisecond {
-			b.Errorf("AddProtocol took %v, exceeds 500ms target", addDuration)
+		// 验证添加操作本身是否满足1毫秒目标
+		if addDuration > 1*time.Millisecond {
+			b.Errorf("AddProtocol took %v, exceeds 1ms target", addDuration)
 		}
 	}
 }
