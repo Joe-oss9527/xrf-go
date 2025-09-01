@@ -322,7 +322,7 @@ func HandleError(err error) {
 	}
 
 	if xrfErr := GetXRFError(err); xrfErr != nil {
-		Error(xrfErr.GetFormattedError())
+		Error("%s", xrfErr.GetFormattedError())
 	} else {
 		Error("发生错误: %v", err)
 	}
@@ -340,5 +340,5 @@ func HandleWarning(message string, suggestions ...string) {
 		}
 	}
 
-	Warning(sb.String())
+	Warning("%s", sb.String())
 }

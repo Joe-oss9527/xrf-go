@@ -216,26 +216,47 @@ func getIntValue(config map[string]interface{}, key string, defaultValue int) in
 }
 
 func getClientsFromConfig(config map[string]interface{}) []map[string]interface{} {
-	if inbounds, exists := config["inbounds"]; exists {
-		if inboundList, ok := inbounds.([]interface{}); ok && len(inboundList) > 0 {
-			if inbound, ok := inboundList[0].(map[string]interface{}); ok {
-				if settings, exists := inbound["settings"]; exists {
-					if settingsMap, ok := settings.(map[string]interface{}); ok {
-						if clients, exists := settingsMap["clients"]; exists {
-							if clientList, ok := clients.([]interface{}); ok {
-								var result []map[string]interface{}
-								for _, client := range clientList {
-									if clientMap, ok := client.(map[string]interface{}); ok {
-										result = append(result, clientMap)
-									}
-								}
-								return result
-							}
-						}
-					}
-				}
-			}
+	inbounds, exists := config["inbounds"]
+	if !exists {
+		return nil
+	}
+
+	inboundList, ok := inbounds.([]interface{})
+	if !ok || len(inboundList) == 0 {
+		return nil
+	}
+
+	inbound, ok := inboundList[0].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	settings, exists := inbound["settings"]
+	if !exists {
+		return nil
+	}
+
+	settingsMap, ok := settings.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	clients, exists := settingsMap["clients"]
+	if !exists {
+		return nil
+	}
+
+	clientList, ok := clients.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	var result []map[string]interface{}
+	for _, client := range clientList {
+		if clientMap, ok := client.(map[string]interface{}); ok {
+			result = append(result, clientMap)
 		}
 	}
-	return nil
+
+	return result
 }
