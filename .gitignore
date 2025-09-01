@@ -58,6 +58,8 @@ config.json
 # Backup files
 *.bak
 *.backup
+*.tar.gz
+xrf-*-backup-*
 
 # Debug files
 debug

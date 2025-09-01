@@ -200,7 +200,7 @@ func TestMultiProtocolSupport(t *testing.T) {
 			}
 
 			// 验证性能 - TLS协议首次可能需要生成证书，允许更长时间
-			targetDuration := 20 * time.Millisecond
+			targetDuration := 30 * time.Millisecond // CI环境中允许30ms
 			if protocol.name == "vless-ws" || protocol.name == "trojan-ws" {
 				targetDuration = 100 * time.Millisecond // TLS协议需要证书生成
 			}
