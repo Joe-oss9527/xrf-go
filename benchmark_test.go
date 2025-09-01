@@ -11,7 +11,6 @@ import (
 
 // BenchmarkAddProtocol 测试添加协议的性能
 func BenchmarkAddProtocol(b *testing.B) {
-	
 	// 创建临时配置目录
 	tempDir := "/tmp/xrf-benchmark-test"
 	os.MkdirAll(tempDir, 0755)
@@ -52,7 +51,6 @@ func BenchmarkAddProtocol(b *testing.B) {
 
 // BenchmarkConfigOperations 测试完整的配置操作流程
 func BenchmarkConfigOperations(b *testing.B) {
-	
 	tempDir := "/tmp/xrf-benchmark-ops"
 	os.MkdirAll(tempDir, 0755)
 	defer os.RemoveAll(tempDir)
@@ -116,7 +114,6 @@ func BenchmarkConfigOperations(b *testing.B) {
 
 // TestPerformanceTarget 测试性能目标
 func TestPerformanceTarget(t *testing.T) {
-	
 	tempDir := "/tmp/xrf-performance-test"
 	os.MkdirAll(tempDir, 0755)
 	defer os.RemoveAll(tempDir)
