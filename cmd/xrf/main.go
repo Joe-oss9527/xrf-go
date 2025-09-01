@@ -1188,7 +1188,9 @@ func createTLSRequestCommand() *cobra.Command {
 
 	cmd.Flags().StringVar(&email, "email", "", "ACME 账户邮箱")
 	cmd.Flags().BoolVar(&staging, "staging", false, "使用 Let's Encrypt 测试环境")
-	cmd.MarkFlagRequired("email")
+	if err := cmd.MarkFlagRequired("email"); err != nil {
+		panic(fmt.Sprintf("failed to mark email flag as required: %v", err))
+	}
 
 	return cmd
 }
@@ -1237,7 +1239,9 @@ func createTLSRenewCommand() *cobra.Command {
 
 	cmd.Flags().StringVar(&email, "email", "", "ACME 账户邮箱")
 	cmd.Flags().BoolVar(&all, "all", false, "续期所有即将过期的证书")
-	cmd.MarkFlagRequired("email")
+	if err := cmd.MarkFlagRequired("email"); err != nil {
+		panic(fmt.Sprintf("failed to mark email flag as required: %v", err))
+	}
 
 	return cmd
 }
@@ -1292,7 +1296,9 @@ func createTLSAutoRenewCommand() *cobra.Command {
 
 	cmd.Flags().StringVar(&email, "email", "", "ACME 账户邮箱")
 	cmd.Flags().BoolVar(&enable, "enable", false, "启用自动续期")
-	cmd.MarkFlagRequired("email")
+	if err := cmd.MarkFlagRequired("email"); err != nil {
+		panic(fmt.Sprintf("failed to mark email flag as required: %v", err))
+	}
 
 	return cmd
 }
@@ -1386,8 +1392,12 @@ func createCaddyConfigCommand() *cobra.Command {
 
 	cmd.Flags().StringVar(&domain, "domain", "", "域名")
 	cmd.Flags().StringVar(&upstream, "upstream", "", "上游服务器地址")
-	cmd.MarkFlagRequired("domain")
-	cmd.MarkFlagRequired("upstream")
+	if err := cmd.MarkFlagRequired("domain"); err != nil {
+		panic(fmt.Sprintf("failed to mark domain flag as required: %v", err))
+	}
+	if err := cmd.MarkFlagRequired("upstream"); err != nil {
+		panic(fmt.Sprintf("failed to mark upstream flag as required: %v", err))
+	}
 
 	return cmd
 }
@@ -1432,8 +1442,12 @@ func createCaddyMaskCommand() *cobra.Command {
 
 	cmd.Flags().StringVar(&domain, "domain", "", "域名")
 	cmd.Flags().StringVar(&maskSite, "site", "", "伪装网站地址")
-	cmd.MarkFlagRequired("domain")
-	cmd.MarkFlagRequired("site")
+	if err := cmd.MarkFlagRequired("domain"); err != nil {
+		panic(fmt.Sprintf("failed to mark domain flag as required: %v", err))
+	}
+	if err := cmd.MarkFlagRequired("site"); err != nil {
+		panic(fmt.Sprintf("failed to mark site flag as required: %v", err))
+	}
 
 	return cmd
 }

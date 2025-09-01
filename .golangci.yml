@@ -1,0 +1,69 @@
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck
+    - gosimple  
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - unconvert
+    - gocritic
+    - gocyclo
+    - gosec
+  disable:
+    - deadcode
+    - varcheck
+    - structcheck
+
+linters-settings:
+  errcheck:
+    # 忽略这些函数的错误检查 - 符合Go惯例的场景
+    ignore: |
+      fmt:.*,
+      (os\.RemoveAll|os\.Remove)\(,
+      .*\.Close\(\),
+      .*\.Flush\(\),
+      os\.MkdirAll\(,
+      .*\.MarkFlagRequired\(
+    # 排除测试文件中的清理操作
+    exclude-functions:
+      - (*os.File).Close
+      - (*net/http.Response).Body.Close
+      
+  gocyclo:
+    min-complexity: 15
+    
+  gocritic:
+    disabled-checks:
+      - ifElseChain
+      - singleCaseSwitch
+
+issues:
+  # 排除测试文件中的某些检查
+  exclude-rules:
+    # 测试文件中忽略RemoveAll错误
+    - path: _test\.go
+      text: "Error return value of `os.RemoveAll` is not checked"
+      linters:
+        - errcheck
+    # 测试文件中忽略defer Close错误  
+    - path: _test\.go
+      text: "Error return value of.*Close.*is not checked"
+      linters:
+        - errcheck
+    # benchmark测试文件完全忽略errcheck
+    - path: benchmark_test\.go
+      linters:
+        - errcheck
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
