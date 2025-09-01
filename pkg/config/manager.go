@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -255,16 +256,316 @@ func (cm *ConfigManager) ValidateConfig() error {
 	return utils.ValidateXrayConfDir(cm.confDir)
 }
 
+// GenerateShareURL 生成协议分享链接
+func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
+	info, err := cm.GetProtocolInfo(tag)
+	if err != nil {
+		return "", err
+	}
+	
+	// 读取完整配置文件
+	files, err := cm.findConfigFilesByTag(tag)
+	if err != nil {
+		return "", err
+	}
+	
+	if len(files) == 0 {
+		return "", fmt.Errorf("protocol with tag '%s' not found", tag)
+	}
+	
+	config, err := cm.readConfigFile(files[0].Path)
+	if err != nil {
+		return "", err
+	}
+	
+	// 合并配置信息
+	urlConfig := make(map[string]interface{})
+	urlConfig["host"] = "localhost" // 默认主机，用户可以修改
+	urlConfig["port"] = info.Port
+	urlConfig["remark"] = tag
+	
+	// 从配置中提取所需信息
+	if inbounds, exists := config["inbounds"]; exists {
+		if inboundList, ok := inbounds.([]interface{}); ok && len(inboundList) > 0 {
+			if inbound, ok := inboundList[0].(map[string]interface{}); ok {
+				// 提取端口
+				if port, exists := inbound["port"]; exists {
+					urlConfig["port"] = port
+				}
+				
+				// 提取设置
+				if settings, exists := inbound["settings"]; exists {
+					if settingsMap, ok := settings.(map[string]interface{}); ok {
+						// 提取客户端信息
+						if clients, exists := settingsMap["clients"]; exists {
+							if clientList, ok := clients.([]interface{}); ok && len(clientList) > 0 {
+								if client, ok := clientList[0].(map[string]interface{}); ok {
+									if uuid, exists := client["id"]; exists {
+										urlConfig["uuid"] = uuid
+									}
+									if password, exists := client["password"]; exists {
+										urlConfig["password"] = password
+									}
+								}
+							}
+						}
+						
+						// 提取加密方法（Shadowsocks）
+						if method, exists := settingsMap["method"]; exists {
+							urlConfig["method"] = method
+						}
+						if password, exists := settingsMap["password"]; exists {
+							urlConfig["password"] = password
+						}
+					}
+				}
+				
+				// 提取流设置
+				if streamSettings, exists := inbound["streamSettings"]; exists {
+					if streamMap, ok := streamSettings.(map[string]interface{}); ok {
+						if network, exists := streamMap["network"]; exists {
+							urlConfig["network"] = network
+						}
+						
+						// WebSocket 设置
+						if wsSettings, exists := streamMap["wsSettings"]; exists {
+							if wsMap, ok := wsSettings.(map[string]interface{}); ok {
+								if path, exists := wsMap["path"]; exists {
+									urlConfig["path"] = path
+								}
+							}
+						}
+						
+						// HTTPUpgrade 设置
+						if huSettings, exists := streamMap["httpupgradeSettings"]; exists {
+							if huMap, ok := huSettings.(map[string]interface{}); ok {
+								if path, exists := huMap["path"]; exists {
+									urlConfig["path"] = path
+								}
+							}
+						}
+						
+						// REALITY 设置
+						if realitySettings, exists := streamMap["realitySettings"]; exists {
+							if realityMap, ok := realitySettings.(map[string]interface{}); ok {
+								if dest, exists := realityMap["dest"]; exists {
+									urlConfig["dest"] = dest
+								}
+								if publicKey, exists := realityMap["publicKey"]; exists {
+									urlConfig["publicKey"] = publicKey
+								}
+								if serverNames, exists := realityMap["serverNames"]; exists {
+									if serverNameList, ok := serverNames.([]interface{}); ok && len(serverNameList) > 0 {
+										urlConfig["serverName"] = serverNameList[0]
+									}
+								}
+								if shortIds, exists := realityMap["shortIds"]; exists {
+									if shortIdList, ok := shortIds.([]interface{}); ok && len(shortIdList) > 0 {
+										urlConfig["shortId"] = shortIdList[0]
+									}
+								}
+								if fingerprint, exists := realityMap["fingerprint"]; exists {
+									urlConfig["fingerprint"] = fingerprint
+								}
+							}
+						}
+						
+						// TLS 设置
+						if security, exists := streamMap["security"]; exists {
+							urlConfig["security"] = security
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	return utils.GenerateProtocolURL(info.Type, tag, urlConfig)
+}
+
 // BackupConfig 备份配置
 func (cm *ConfigManager) BackupConfig(backupPath string) error {
-	// TODO: 实现配置备份
-	return fmt.Errorf("backup functionality not implemented yet")
+	if backupPath == "" {
+		// 生成默认备份路径
+		backupPath = fmt.Sprintf("xrf-backup-%s.tar.gz", strings.ReplaceAll(strings.Replace(utils.GetCurrentTime(), " ", "_", -1), ":", "-"))
+	}
+	
+	// 检查配置目录是否存在
+	if _, err := os.Stat(cm.confDir); os.IsNotExist(err) {
+		return fmt.Errorf("configuration directory does not exist: %s", cm.confDir)
+	}
+	
+	// 创建临时目录
+	tempDir, err := ioutil.TempDir("", "xrf-backup-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+	
+	// 创建备份信息文件
+	backupInfo := map[string]interface{}{
+		"version":     "1.0.0",
+		"backup_time": utils.GetCurrentTime(),
+		"config_dir":  cm.confDir,
+		"protocols":   []string{},
+	}
+	
+	// 列出所有协议
+	protocols, err := cm.ListProtocols()
+	if err != nil {
+		return fmt.Errorf("failed to list protocols: %w", err)
+	}
+	
+	protocolTags := make([]string, len(protocols))
+	for i, p := range protocols {
+		protocolTags[i] = p.Tag
+	}
+	backupInfo["protocols"] = protocolTags
+	
+	// 写入备份信息
+	infoPath := filepath.Join(tempDir, "backup-info.json")
+	infoBytes, _ := json.MarshalIndent(backupInfo, "", "  ")
+	if err := ioutil.WriteFile(infoPath, infoBytes, 0644); err != nil {
+		return fmt.Errorf("failed to write backup info: %w", err)
+	}
+	
+	// 复制配置文件
+	configBackupDir := filepath.Join(tempDir, "confs")
+	if err := os.MkdirAll(configBackupDir, 0755); err != nil {
+		return fmt.Errorf("failed to create config backup dir: %w", err)
+	}
+	
+	if err := copyDir(cm.confDir, configBackupDir); err != nil {
+		return fmt.Errorf("failed to copy configuration files: %w", err)
+	}
+	
+	// 创建 tar.gz 压缩包
+	if err := createTarGz(tempDir, backupPath); err != nil {
+		return fmt.Errorf("failed to create backup archive: %w", err)
+	}
+	
+	utils.Success("Configuration backed up to: %s", backupPath)
+	return nil
 }
 
 // RestoreConfig 恢复配置
 func (cm *ConfigManager) RestoreConfig(backupPath string) error {
-	// TODO: 实现配置恢复
-	return fmt.Errorf("restore functionality not implemented yet")
+	// 检查备份文件是否存在
+	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
+		return fmt.Errorf("backup file does not exist: %s", backupPath)
+	}
+	
+	// 创建临时目录
+	tempDir, err := ioutil.TempDir("", "xrf-restore-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+	
+	// 解压备份文件
+	if err := extractTarGz(backupPath, tempDir); err != nil {
+		return fmt.Errorf("failed to extract backup: %w", err)
+	}
+	
+	// 读取备份信息
+	infoPath := filepath.Join(tempDir, "backup-info.json")
+	infoBytes, err := ioutil.ReadFile(infoPath)
+	if err != nil {
+		return fmt.Errorf("failed to read backup info: %w", err)
+	}
+	
+	var backupInfo map[string]interface{}
+	if err := json.Unmarshal(infoBytes, &backupInfo); err != nil {
+		return fmt.Errorf("failed to parse backup info: %w", err)
+	}
+	
+	// 备份当前配置（以防恢复失败）
+	currentBackupPath := fmt.Sprintf("xrf-current-backup-%s.tar.gz", 
+		strings.ReplaceAll(strings.Replace(utils.GetCurrentTime(), " ", "_", -1), ":", "-"))
+	
+	utils.Info("Creating backup of current configuration...")
+	if err := cm.BackupConfig(currentBackupPath); err != nil {
+		utils.Warning("Failed to backup current configuration: %v", err)
+	}
+	
+	// 删除当前配置目录（如果存在）
+	if _, err := os.Stat(cm.confDir); err == nil {
+		if err := os.RemoveAll(cm.confDir); err != nil {
+			return fmt.Errorf("failed to remove current configuration: %w", err)
+		}
+	}
+	
+	// 恢复配置文件
+	configRestoreDir := filepath.Join(tempDir, "confs")
+	if err := copyDir(configRestoreDir, cm.confDir); err != nil {
+		return fmt.Errorf("failed to restore configuration files: %w", err)
+	}
+	
+	// 显示恢复信息
+	if backupTime, exists := backupInfo["backup_time"]; exists {
+		utils.Success("Configuration restored from backup created at: %v", backupTime)
+	}
+	if protocols, exists := backupInfo["protocols"]; exists {
+		if protocolList, ok := protocols.([]interface{}); ok {
+			utils.Info("Restored %d protocol configurations", len(protocolList))
+		}
+	}
+	
+	return nil
+}
+
+// 辅助函数
+
+func copyDir(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		
+		relPath, _ := filepath.Rel(src, path)
+		dstPath := filepath.Join(dst, relPath)
+		
+		if info.IsDir() {
+			return os.MkdirAll(dstPath, info.Mode())
+		}
+		
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer srcFile.Close()
+		
+		dstFile, err := os.Create(dstPath)
+		if err != nil {
+			return err
+		}
+		defer dstFile.Close()
+		
+		if err := dstFile.Chmod(info.Mode()); err != nil {
+			return err
+		}
+		
+		_, err = srcFile.WriteTo(dstFile)
+		return err
+	})
+}
+
+func createTarGz(srcDir, dstPath string) error {
+	// 使用系统 tar 命令创建压缩包
+	cmd := exec.Command("tar", "-czf", dstPath, "-C", srcDir, ".")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("tar command failed: %w", err)
+	}
+	return nil
+}
+
+func extractTarGz(srcPath, dstDir string) error {
+	// 使用系统 tar 命令解压
+	cmd := exec.Command("tar", "-xzf", srcPath, "-C", dstDir)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("tar extraction failed: %w", err)
+	}
+	return nil
 }
 
 // 生成模板数据
@@ -596,8 +897,218 @@ func (cm *ConfigManager) parseProtocolInfo(file ConfigFile) (ProtocolInfo, error
 	return info, nil
 }
 
+// GetProtocolInfo 获取协议详细信息
+func (cm *ConfigManager) GetProtocolInfo(tag string) (ProtocolInfo, error) {
+	files, err := cm.findConfigFilesByTag(tag)
+	if err != nil {
+		return ProtocolInfo{}, err
+	}
+	
+	if len(files) == 0 {
+		return ProtocolInfo{}, fmt.Errorf("protocol with tag '%s' not found", tag)
+	}
+	
+	// 使用第一个匹配的文件
+	file := files[0]
+	info, err := cm.parseProtocolInfo(file)
+	if err != nil {
+		return ProtocolInfo{}, err
+	}
+	
+	// 获取协议定义以补充更多信息
+	if protocol, err := cm.protocols.GetProtocol(info.Type); err == nil {
+		info.Settings["description"] = protocol.Description
+		info.Settings["aliases"] = protocol.Aliases
+		info.Settings["requiresTLS"] = protocol.RequiresTLS
+		info.Settings["requiresDomain"] = protocol.RequiresDomain
+		info.Settings["supportedTransports"] = protocol.SupportedTransports
+	}
+	
+	return info, nil
+}
+
 // 合并配置选项
 func (cm *ConfigManager) mergeConfigOptions(config map[string]interface{}, options map[string]interface{}) error {
-	// TODO: 实现配置选项合并逻辑
-	return fmt.Errorf("config merging not implemented yet")
+	// 递归合并配置
+	for key, newValue := range options {
+		if key == "port" {
+			// 更新入站端口
+			if err := cm.updateInboundPort(config, newValue); err != nil {
+				return err
+			}
+		} else if key == "password" {
+			// 更新密码
+			if err := cm.updatePassword(config, newValue); err != nil {
+				return err
+			}
+		} else if key == "uuid" {
+			// 更新 UUID
+			if err := cm.updateUUID(config, newValue); err != nil {
+				return err
+			}
+		} else if key == "path" {
+			// 更新路径
+			if err := cm.updateTransportPath(config, newValue); err != nil {
+				return err
+			}
+		} else {
+			// 其他简单键值对直接更新
+			config[key] = newValue
+		}
+	}
+	
+	return nil
+}
+
+// 更新入站端口
+func (cm *ConfigManager) updateInboundPort(config map[string]interface{}, portValue interface{}) error {
+	var port int
+	
+	switch v := portValue.(type) {
+	case int:
+		port = v
+	case string:
+		if p, err := strconv.Atoi(v); err == nil {
+			port = p
+		} else {
+			return fmt.Errorf("invalid port format: %s", v)
+		}
+	case float64:
+		port = int(v)
+	default:
+		return fmt.Errorf("unsupported port type: %T", portValue)
+	}
+	
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("port must be between 1 and 65535")
+	}
+	
+	// 更新 inbounds 中的端口
+	if inbounds, exists := config["inbounds"]; exists {
+		if inboundList, ok := inbounds.([]interface{}); ok {
+			for _, inbound := range inboundList {
+				if inboundMap, ok := inbound.(map[string]interface{}); ok {
+					inboundMap["port"] = port
+				}
+			}
+		}
+	}
+	
+	return nil
+}
+
+// 更新密码
+func (cm *ConfigManager) updatePassword(config map[string]interface{}, passwordValue interface{}) error {
+	password, ok := passwordValue.(string)
+	if !ok {
+		return fmt.Errorf("password must be a string")
+	}
+	
+	// 更新 inbounds 中的密码
+	if inbounds, exists := config["inbounds"]; exists {
+		if inboundList, ok := inbounds.([]interface{}); ok {
+			for _, inbound := range inboundList {
+				if inboundMap, ok := inbound.(map[string]interface{}); ok {
+					if settings, exists := inboundMap["settings"]; exists {
+						if settingsMap, ok := settings.(map[string]interface{}); ok {
+							// Shadowsocks
+							if _, exists := settingsMap["method"]; exists {
+								settingsMap["password"] = password
+							}
+							// Trojan
+							if clients, exists := settingsMap["clients"]; exists {
+								if clientList, ok := clients.([]interface{}); ok {
+									for _, client := range clientList {
+										if clientMap, ok := client.(map[string]interface{}); ok {
+											clientMap["password"] = password
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	return nil
+}
+
+// 更新 UUID
+func (cm *ConfigManager) updateUUID(config map[string]interface{}, uuidValue interface{}) error {
+	uuid, ok := uuidValue.(string)
+	if !ok {
+		return fmt.Errorf("uuid must be a string")
+	}
+	
+	// 验证 UUID 格式
+	if !utils.IsValidUUID(uuid) {
+		return fmt.Errorf("invalid UUID format")
+	}
+	
+	// 更新 inbounds 中的 UUID
+	if inbounds, exists := config["inbounds"]; exists {
+		if inboundList, ok := inbounds.([]interface{}); ok {
+			for _, inbound := range inboundList {
+				if inboundMap, ok := inbound.(map[string]interface{}); ok {
+					if settings, exists := inboundMap["settings"]; exists {
+						if settingsMap, ok := settings.(map[string]interface{}); ok {
+							if clients, exists := settingsMap["clients"]; exists {
+								if clientList, ok := clients.([]interface{}); ok {
+									for _, client := range clientList {
+										if clientMap, ok := client.(map[string]interface{}); ok {
+											clientMap["id"] = uuid
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	return nil
+}
+
+// 更新传输路径
+func (cm *ConfigManager) updateTransportPath(config map[string]interface{}, pathValue interface{}) error {
+	path, ok := pathValue.(string)
+	if !ok {
+		return fmt.Errorf("path must be a string")
+	}
+	
+	if path == "" || !strings.HasPrefix(path, "/") {
+		return fmt.Errorf("path must start with /")
+	}
+	
+	// 更新 inbounds 中的路径
+	if inbounds, exists := config["inbounds"]; exists {
+		if inboundList, ok := inbounds.([]interface{}); ok {
+			for _, inbound := range inboundList {
+				if inboundMap, ok := inbound.(map[string]interface{}); ok {
+					if streamSettings, exists := inboundMap["streamSettings"]; exists {
+						if streamMap, ok := streamSettings.(map[string]interface{}); ok {
+							// WebSocket
+							if wsSettings, exists := streamMap["wsSettings"]; exists {
+								if wsMap, ok := wsSettings.(map[string]interface{}); ok {
+									wsMap["path"] = path
+								}
+							}
+							// HTTPUpgrade
+							if httpupgradeSettings, exists := streamMap["httpupgradeSettings"]; exists {
+								if httpupgradeMap, ok := httpupgradeSettings.(map[string]interface{}); ok {
+									httpupgradeMap["path"] = path
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	return nil
 }

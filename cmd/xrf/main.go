@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
@@ -78,6 +79,86 @@ func main() {
 		utils.PrintError("Error: %v", err)
 		os.Exit(1)
 	}
+}
+
+// 日志查看相关辅助函数
+
+func showLogFile(logFile string, lines int, errorOnly bool) error {
+	var cmd *exec.Cmd
+	
+	if errorOnly {
+		// 使用 grep 过滤错误日志
+		cmd = exec.Command("sh", "-c", fmt.Sprintf("tail -n %d %s | grep -i 'error\\|failed\\|exception'", lines, logFile))
+	} else {
+		cmd = exec.Command("tail", "-n", strconv.Itoa(lines), logFile)
+	}
+	
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to read log file: %w", err)
+	}
+	
+	if len(output) == 0 {
+		utils.PrintInfo("没有找到日志内容")
+		return nil
+	}
+	
+	fmt.Print(string(output))
+	return nil
+}
+
+func followLogFile(logFile string, errorOnly bool) error {
+	var cmd *exec.Cmd
+	
+	if errorOnly {
+		// 使用 tail -f 跟踪日志并过滤错误
+		cmd = exec.Command("sh", "-c", fmt.Sprintf("tail -f %s | grep --line-buffered -i 'error\\|failed\\|exception'", logFile))
+	} else {
+		cmd = exec.Command("tail", "-f", logFile)
+	}
+	
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	
+	utils.PrintInfo("正在跟踪日志文件，按 Ctrl+C 停止...")
+	return cmd.Run()
+}
+
+func showSystemdJournal(lines int, errorOnly bool) error {
+	utils.PrintInfo("使用 systemd journal 查看日志")
+	
+	args := []string{"-u", "xray", "-n", strconv.Itoa(lines), "--no-pager"}
+	if errorOnly {
+		args = append(args, "-p", "err")
+	}
+	
+	cmd := exec.Command("journalctl", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	
+	if err := cmd.Run(); err != nil {
+		utils.PrintWarning("无法读取 systemd journal: %v", err)
+		utils.PrintInfo("请检查 Xray 服务状态：systemctl status xray")
+		return nil
+	}
+	
+	return nil
+}
+
+func showSystemdJournalFollow() error {
+	utils.PrintInfo("正在跟踪 systemd journal，按 Ctrl+C 停止...")
+	
+	cmd := exec.Command("journalctl", "-u", "xray", "-f", "--no-pager")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	
+	if err := cmd.Run(); err != nil {
+		utils.PrintWarning("无法跟踪 systemd journal: %v", err)
+		utils.PrintInfo("请检查 Xray 服务状态：systemctl status xray")
+		return nil
+	}
+	
+	return nil
 }
 
 func createInstallCommand() *cobra.Command {
@@ -305,11 +386,18 @@ func createInfoCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tag := args[0]
 			
-			utils.PrintSection("协议配置详情")
-			utils.PrintInfo("标签: %s", tag)
+			// 获取协议详细信息
+			info, err := configMgr.GetProtocolInfo(tag)
+			if err != nil {
+				return fmt.Errorf("获取协议信息失败: %w", err)
+			}
 			
-			// TODO: 实现配置详情显示
-			utils.PrintWarning("配置详情功能尚未实现")
+			// 添加配置文件信息到 settings
+			info.Settings["config_file"] = info.ConfigFile
+			
+			// 显示详细信息
+			utils.PrintDetailedProtocolInfo(info.Type, info.Tag, info.Type, info.Port, info.Settings)
+			
 			return nil
 		},
 	}
@@ -321,17 +409,60 @@ func createChangeCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "change [tag] [key] [value]",
 		Short: "修改协议配置",
-		Long:  `修改指定协议的配置参数。`,
+		Long: `修改指定协议的配置参数。
+
+支持的参数:
+  • port       - 端口号 (数字)
+  • password   - 密码 (字符串)
+  • uuid       - UUID (字符串)
+  • path       - 路径 (字符串)
+
+示例:
+  xrf change vless_reality port 8443     # 修改端口
+  xrf change trojan_ws password newpass  # 修改密码
+  xrf change vmess_ws uuid new-uuid      # 修改 UUID
+  xrf change vless_ws path /newpath      # 修改路径`,
 		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tag, key, value := args[0], args[1], args[2]
 			
 			utils.PrintSection("修改协议配置")
 			utils.PrintInfo("标签: %s", tag)
-			utils.PrintInfo("参数: %s = %s", key, value)
+			utils.PrintInfo("参数: %s -> %s", key, value)
+			
+			// 验证配置是否存在
+			_, err := configMgr.GetProtocolInfo(tag)
+			if err != nil {
+				return fmt.Errorf("协议配置不存在: %w", err)
+			}
+			
+			// 转换值类型
+			var typedValue interface{} = value
+			switch key {
+			case "port":
+				if portInt, err := strconv.Atoi(value); err != nil {
+					return fmt.Errorf("端口必须是数字: %s", value)
+				} else if portInt < 1 || portInt > 65535 {
+					return fmt.Errorf("端口必须在 1-65535 范围内")
+				} else {
+					typedValue = portInt
+				}
+			case "uuid":
+				if !utils.IsValidUUID(value) {
+					return fmt.Errorf("无效的 UUID 格式: %s", value)
+				}
+			case "path":
+				if !strings.HasPrefix(value, "/") {
+					return fmt.Errorf("路径必须以 / 开头: %s", value)
+				}
+			case "password":
+				if len(value) < 6 {
+					return fmt.Errorf("密码长度至少 6 位")
+				}
+			}
 			
 			options := map[string]interface{}{
-				key: value,
+				key: typedValue,
 			}
 			
 			if err := configMgr.UpdateProtocol(tag, options); err != nil {
@@ -339,6 +470,12 @@ func createChangeCommand() *cobra.Command {
 			}
 			
 			utils.PrintSuccess("协议配置修改成功")
+			
+			// 显示修改后的信息
+			if key == "port" || key == "password" || key == "uuid" || key == "path" {
+				utils.PrintInfo("新值: %v", typedValue)
+			}
+			
 			return nil
 		},
 	}
@@ -493,76 +630,263 @@ func createBackupCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "backup",
 		Short: "备份配置",
+		Long: `备份当前的协议配置到压缩文件。
+
+如果不指定输出路径，将生成默认的时间戳文件名。
+
+示例:
+  xrf backup                           # 备份到默认文件
+  xrf backup --output my-backup.tar.gz # 备份到指定文件`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			utils.PrintInfo("备份配置到: %s", backupPath)
-			// TODO: 实现配置备份
-			utils.PrintWarning("配置备份功能尚未实现")
+			utils.PrintSection("配置备份")
+			
+			if backupPath != "" {
+				utils.PrintInfo("备份路径: %s", backupPath)
+			} else {
+				utils.PrintInfo("使用默认备份路径")
+			}
+			
+			if err := configMgr.BackupConfig(backupPath); err != nil {
+				return fmt.Errorf("备份失败: %w", err)
+			}
+			
+			utils.PrintSuccess("配置备份完成")
 			return nil
 		},
 	}
 	
-	cmd.Flags().StringVar(&backupPath, "output", "", "备份文件路径")
+	cmd.Flags().StringVarP(&backupPath, "output", "o", "", "备份文件路径（可选）")
 	return cmd
 }
 
 func createRestoreCommand() *cobra.Command {
+	var confirmRestore bool
+	
 	cmd := &cobra.Command{
 		Use:   "restore [backup-file]",
 		Short: "恢复配置",
+		Long: `从备份文件恢复配置。
+
+警告: 此操作将替换当前的所有配置。建议先备份当前配置。
+
+示例:
+  xrf restore my-backup.tar.gz --confirm    # 恢复配置`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			backupFile := args[0]
-			utils.PrintInfo("从备份文件恢复配置: %s", backupFile)
-			// TODO: 实现配置恢复
-			utils.PrintWarning("配置恢复功能尚未实现")
+			
+			utils.PrintSection("配置恢复")
+			utils.PrintInfo("备份文件: %s", backupFile)
+			
+			if !confirmRestore {
+				utils.PrintWarning("此操作将替换当前的所有配置！")
+				utils.PrintWarning("建议先执行 'xrf backup' 备份当前配置")
+				utils.PrintError("请使用 --confirm 参数确认执行恢复操作")
+				return fmt.Errorf("恢复操作需要确认")
+			}
+			
+			utils.PrintInfo("正在恢复配置...")
+			
+			if err := configMgr.RestoreConfig(backupFile); err != nil {
+				return fmt.Errorf("恢复失败: %w", err)
+			}
+			
+			utils.PrintSuccess("配置恢复完成")
+			utils.PrintInfo("建议执行 'xrf test' 验证配置")
 			return nil
 		},
 	}
 	
+	cmd.Flags().BoolVar(&confirmRestore, "confirm", false, "确认执行恢复操作")
 	return cmd
 }
 
 func createURLCommand() *cobra.Command {
-	return &cobra.Command{
+	var showHost bool
+	var customHost string
+	
+	cmd := &cobra.Command{
 		Use:   "url [tag]",
 		Short: "生成分享链接",
-		Args:  cobra.ExactArgs(1),
+		Long: `生成指定协议的分享链接，支持各种客户端格式。
+
+注意: 默认使用 localhost 作为主机地址，请使用 --host 参数指定实际的服务器地址。
+
+示例:
+  xrf url vless_reality --host example.com    # 生成 VLESS-REALITY 链接
+  xrf url vmess_ws --host 192.168.1.100       # 生成 VMess 链接
+  xrf url --list                              # 显示所有可用的协议标签`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if showHost {
+				return nil // --list 不需要参数
+			}
+			return cobra.ExactArgs(1)(cmd, args)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if showHost {
+				// 显示所有可用的协议
+				protocols, err := configMgr.ListProtocols()
+				if err != nil {
+					return fmt.Errorf("获取协议列表失败: %w", err)
+				}
+				
+				utils.PrintSection("可用的协议配置")
+				for _, protocol := range protocols {
+					utils.PrintInfo("• %s (%s)", protocol.Tag, protocol.Type)
+				}
+				return nil
+			}
+			
 			tag := args[0]
-			utils.PrintInfo("生成分享链接: %s", tag)
-			// TODO: 实现分享链接生成
-			utils.PrintWarning("分享链接生成功能尚未实现")
+			
+			utils.PrintSection("生成分享链接")
+			utils.PrintInfo("协议标签: %s", tag)
+			
+			// 生成分享链接
+			shareURL, err := configMgr.GenerateShareURL(tag)
+			if err != nil {
+				return fmt.Errorf("生成分享链接失败: %w", err)
+			}
+			
+			// 如果用户指定了自定义主机，替换 URL 中的主机
+			if customHost != "" {
+				shareURL = strings.Replace(shareURL, "localhost", customHost, 1)
+			}
+			
+			utils.PrintSubSection("分享链接")
+			fmt.Printf("  %s\n", shareURL)
+			
+			// 显示提示信息
+			if customHost == "" {
+				utils.PrintWarning("注意: 链接使用 'localhost' 作为主机地址")
+				utils.PrintInfo("使用 --host 参数指定实际的服务器地址")
+				utils.PrintInfo("例如: xrf url %s --host your-server.com", tag)
+			}
+			
 			return nil
 		},
 	}
+	
+	cmd.Flags().BoolVar(&showHost, "list", false, "显示所有可用的协议标签")
+	cmd.Flags().StringVar(&customHost, "host", "", "指定服务器主机地址")
+	
+	return cmd
 }
 
 func createQRCommand() *cobra.Command {
-	return &cobra.Command{
+	var customHost string
+	
+	cmd := &cobra.Command{
 		Use:   "qr [tag]",
 		Short: "显示二维码",
-		Args:  cobra.ExactArgs(1),
+		Long: `显示指定协议的二维码，方便移动端扫描导入。
+
+注意: 默认使用 localhost 作为主机地址，请使用 --host 参数指定实际的服务器地址。
+
+示例:
+  xrf qr vless_reality --host example.com     # 显示 VLESS-REALITY 二维码
+  xrf qr vmess_ws --host 192.168.1.100        # 显示 VMess 二维码`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tag := args[0]
-			utils.PrintInfo("显示二维码: %s", tag)
-			// TODO: 实现二维码显示
-			utils.PrintWarning("二维码显示功能尚未实现")
+			
+			// 生成分享链接
+			shareURL, err := configMgr.GenerateShareURL(tag)
+			if err != nil {
+				return fmt.Errorf("生成分享链接失败: %w", err)
+			}
+			
+			// 如果用户指定了自定义主机，替换 URL 中的主机
+			if customHost != "" {
+				shareURL = strings.Replace(shareURL, "localhost", customHost, 1)
+			}
+			
+			// 显示二维码
+			utils.PrintQRCode(shareURL, tag)
+			
+			// 显示提示信息
+			if customHost == "" {
+				utils.PrintWarning("\n注意: 链接使用 'localhost' 作为主机地址")
+				utils.PrintInfo("使用 --host 参数指定实际的服务器地址")
+				utils.PrintInfo("例如: xrf qr %s --host your-server.com", tag)
+			}
+			
+			// 如果没有安装 qrencode，显示安装说明
+			if !utils.IsQREncodeAvailable() {
+				utils.PrintSubSection("安装说明")
+				fmt.Println(utils.GetQRInstallInstructions())
+			}
+			
 			return nil
 		},
 	}
+	
+	cmd.Flags().StringVar(&customHost, "host", "", "指定服务器主机地址")
+	
+	return cmd
 }
 
 func createLogsCommand() *cobra.Command {
-	return &cobra.Command{
+	var follow bool
+	var lines int
+	var errorOnly bool
+	
+	cmd := &cobra.Command{
 		Use:   "logs",
 		Short: "查看运行日志",
+		Long: `查看 Xray 服务的运行日志。
+
+默认显示最新的 50 行日志。使用 -f 参数可以实时跟踪日志。
+
+示例:
+  xrf logs                    # 显示最新 50 行日志
+  xrf logs -n 100             # 显示最新 100 行日志
+  xrf logs -f                 # 实时跟踪日志
+  xrf logs --error            # 只显示错误日志`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			utils.PrintSection("Xray 运行日志")
-			// TODO: 实现日志查看
-			utils.PrintWarning("日志查看功能尚未实现")
-			return nil
+			
+			// 常见的日志文件位置
+			logPaths := []string{
+				"/var/log/xray/access.log",
+				"/var/log/xray/error.log",
+				"/var/log/xray.log",
+				"/tmp/xray.log",
+			}
+			
+			var logFile string
+			for _, path := range logPaths {
+				if _, err := os.Stat(path); err == nil {
+					logFile = path
+					break
+				}
+			}
+			
+			// 如果找不到日志文件，尝试使用 systemd journal
+			if logFile == "" {
+				if follow {
+					return showSystemdJournalFollow()
+				} else {
+					return showSystemdJournal(lines, errorOnly)
+				}
+			}
+			
+			utils.PrintInfo("日志文件: %s", logFile)
+			
+			// 显示日志
+			if follow {
+				return followLogFile(logFile, errorOnly)
+			} else {
+				return showLogFile(logFile, lines, errorOnly)
+			}
 		},
 	}
+	
+	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "实时跟踪日志")
+	cmd.Flags().IntVarP(&lines, "lines", "n", 50, "显示的行数")
+	cmd.Flags().BoolVar(&errorOnly, "error", false, "只显示错误日志")
+	
+	return cmd
 }
 
 func createVersionCommand() *cobra.Command {

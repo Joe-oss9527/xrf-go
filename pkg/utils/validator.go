@@ -222,3 +222,15 @@ func ValidateDirectoryExists(path string) error {
 	
 	return nil
 }
+
+// IsValidUUID 验证UUID格式是否正确
+func IsValidUUID(uuid string) bool {
+	if uuid == "" {
+		return false
+	}
+	
+	// UUID v4 格式: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+	// 其中 y 必须是 8, 9, a, 或 b
+	uuidRegex := regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[4][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
+	return uuidRegex.MatchString(uuid)
+}
