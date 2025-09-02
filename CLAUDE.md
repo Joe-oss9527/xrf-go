@@ -6,6 +6,20 @@ Project memory file for XRF-Go v1.0.0-RC4 - provides specific development guidan
 
 XRF-Go is a production-ready Xray installation and configuration tool with 100% DESIGN.md alignment. Core design: "High efficiency, ultra-fast, extremely easy to use" with multi-configuration concurrent operation achieving ~0.12ms protocol addition speed.
 
+## 权限处理机制 (Permission Handling)
+
+### 智能权限检测 (基于Docker模式最佳实践)
+- **安装脚本**: 支持root用户直接运行和普通用户sudo权限运行
+- **Go程序**: 要求root权限执行系统级操作 (符合系统工具标准)
+- **权限适配**: 动态检测用户身份，自动设置命令前缀 ($SUDO_CMD)
+- **错误处理**: 提供清晰的权限获取指导和解决方案
+
+### 权限要求原因
+- 绑定特权端口 (80, 443)
+- 写入系统目录 (/usr/local/bin, /etc/xray)
+- 管理systemd服务 (启动、停止、重载)
+- 配置系统优化 (BBR, 文件描述符限制)
+
 ## Code Architecture Requirements
 
 ### Module Structure (Enforce Strictly)
@@ -27,8 +41,9 @@ XRF-Go is a production-ready Xray installation and configuration tool with 100% 
 
 ### Building
 - Production build: `go build -ldflags="-s -w" -o xrf cmd/xrf/main.go`
-- Cross-compile Linux: `GOOS=linux GOARCH=amd64 go build -o xrf-linux-amd64 cmd/xrf/main.go`
-- Cross-compile macOS: `GOOS=darwin GOARCH=arm64 go build -o xrf-darwin-arm64 cmd/xrf/main.go`
+- Cross-compile Linux AMD64: `GOOS=linux GOARCH=amd64 go build -o xrf-linux-amd64 cmd/xrf/main.go`
+- Cross-compile Linux ARM64: `GOOS=linux GOARCH=arm64 go build -o xrf-linux-arm64 cmd/xrf/main.go`
+- 支持的架构: amd64 (x86_64) 和 arm64 (aarch64) 服务器架构
 
 ### Testing
 - Run all tests: `go test ./...`
@@ -169,8 +184,9 @@ if err := validateConfigAfterChange(); err != nil {
 
 ### Runtime Requirements
 - Xray binary: Auto-download from GitHub releases via pkg/system/installer.go
-- System: Ubuntu/CentOS/Debian with systemd support
+- System: Ubuntu/CentOS/Debian with systemd support (仅支持 amd64/arm64 架构)
 - Network: Port availability for protocols (use smart allocation)
+- Permissions: 支持root用户直接运行或普通用户sudo权限运行
 
 ### Build Requirements
 - Go 1.19+ required
@@ -191,6 +207,8 @@ if err := validateConfigAfterChange(); err != nil {
 - ✅ Test architecture restructured (unit/integration separation) 
 - ✅ Performance targets adjusted to realistic values
 - ✅ Go lint compliance achieved (errcheck, gofmt)
+- ✅ Root用户权限处理矛盾修复 - 采用Docker模式智能权限检测
+- ✅ 架构支持精简 - 专注主流服务器架构 (amd64/arm64)
 - Error message improvements
 - Input validation enhancement
 - Documentation updates
