@@ -54,7 +54,8 @@ jobs:
     
     - name: Run tests
       run: |
-        go test -v -timeout=120s ./...
+        export CGO_ENABLED=1
+        go test -v -race -timeout=120s -coverprofile=coverage.txt -covermode=atomic ./...
     
     - name: Build Linux AMD64
       env:
