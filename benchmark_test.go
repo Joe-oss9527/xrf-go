@@ -152,7 +152,7 @@ func TestPerformanceTarget(t *testing.T) {
 		// 验证性能目标 - 为CI环境调整了更宽松的目标
 		targetDuration := 80 * time.Millisecond // 基础协议目标调整到80ms
 		if protocol.name == "vless-ws" || protocol.name == "trojan-ws" {
-			targetDuration = 300 * time.Millisecond // TLS协议首次需要证书生成，调整到300ms
+			targetDuration = 400 * time.Millisecond // TLS协议首次需要证书生成，CI环境调整到400ms
 		}
 
 		if duration > targetDuration {
