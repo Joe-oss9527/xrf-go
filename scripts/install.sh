@@ -75,11 +75,8 @@ detect_system() {
         aarch64)
             ARCH="arm64"
             ;;
-        armv7l)
-            ARCH="armv7"
-            ;;
         *)
-            error "不支持的架构: $ARCH"
+            error "不支持的架构: $ARCH (仅支持 x86_64 和 aarch64)"
             ;;
     esac
     

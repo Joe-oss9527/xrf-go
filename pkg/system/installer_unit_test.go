@@ -144,18 +144,6 @@ func TestInstaller_BinaryNameGeneration_Logic(t *testing.T) {
 			arch:     "amd64",
 			expected: "Xray-windows-64",
 		},
-		{
-			name:     "Linux 32-bit",
-			os:       "linux",
-			arch:     "386",
-			expected: "Xray-linux-32",
-		},
-		{
-			name:     "Linux ARM 32-bit",
-			os:       "linux",
-			arch:     "arm",
-			expected: "Xray-linux-arm32-v7a",
-		},
 	}
 
 	for _, tt := range tests {

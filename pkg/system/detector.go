@@ -328,8 +328,6 @@ func (d *Detector) GetXrayBinaryName() (string, error) {
 	archMap := map[string]string{
 		"amd64": "64",
 		"arm64": "arm64-v8a",
-		"386":   "32",
-		"arm":   "arm32-v7a",
 	}
 
 	if mappedArch, exists := archMap[archName]; exists {

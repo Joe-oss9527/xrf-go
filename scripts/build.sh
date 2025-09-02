@@ -100,12 +100,7 @@ build_single() {
     local goos=$(echo $platform | cut -d'/' -f1)
     local goarch=$(echo $platform | cut -d'/' -f2)
     
-    # 处理 armv7
-    local goarm=""
-    if [[ $goarch == "armv7" ]]; then
-        goarch="arm"
-        goarm="7"
-    fi
+    # 架构处理 (仅支持 amd64 和 arm64)
     
     local output_name="${BINARY_NAME}-${goos}-${goarch}"
     if [[ $goos == "windows" ]]; then

@@ -191,13 +191,6 @@ func TestDetector_GetXrayBinaryName_Logic(t *testing.T) {
 			expected: "Xray-windows-64",
 			wantErr:  false,
 		},
-		{
-			name:     "Linux 32bit",
-			os:       "linux",
-			arch:     "386",
-			expected: "Xray-linux-32",
-			wantErr:  false,
-		},
 	}
 
 	for _, tt := range tests {
