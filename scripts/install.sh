@@ -30,17 +30,30 @@ error() {
     exit 1
 }
 
-# 检查是否为 root 用户
+# 检查用户权限 - 支持root用户和sudo权限
 check_root() {
     if [[ $EUID -eq 0 ]]; then
-        error "请不要使用 root 用户运行此脚本，使用 sudo 权限即可"
-    fi
-    
-    # 检查 sudo 权限
-    if ! sudo -n true 2>/dev/null; then
-        warning "此脚本需要 sudo 权限来安装系统文件"
-        echo "请输入您的密码："
-        sudo -v
+        info "检测到 root 用户，直接执行安装"
+        SUDO_CMD=""
+    elif command -v sudo >/dev/null 2>&1; then
+        info "检测到普通用户，将使用 sudo 权限"
+        SUDO_CMD="sudo"
+        
+        # 验证sudo权限
+        if ! sudo -n true 2>/dev/null; then
+            warning "此脚本需要 sudo 权限来安装系统文件"
+            echo "请输入您的密码以继续安装："
+            if ! sudo -v; then
+                error "无法获取 sudo 权限，安装终止"
+            fi
+        fi
+        success "sudo 权限验证通过"
+    else
+        error "此安装脚本需要 root 权限或 sudo 命令
+        
+解决方案：
+  1. 使用 root 用户运行: sudo bash install.sh
+  2. 或安装 sudo: apt install sudo (Debian/Ubuntu) 或 yum install sudo (CentOS/RHEL)"
     fi
 }
 
@@ -101,9 +114,9 @@ install_xray() {
     cd "$temp_dir"
     unzip -q xray.zip
     
-    sudo install -m 755 xray /usr/local/bin/
-    sudo install -m 644 geoip.dat /usr/local/bin/ 2>/dev/null || true
-    sudo install -m 644 geosite.dat /usr/local/bin/ 2>/dev/null || true
+    $SUDO_CMD install -m 755 xray /usr/local/bin/
+    $SUDO_CMD install -m 644 geoip.dat /usr/local/bin/ 2>/dev/null || true
+    $SUDO_CMD install -m 644 geosite.dat /usr/local/bin/ 2>/dev/null || true
     
     rm -rf "$temp_dir"
     
@@ -127,7 +140,7 @@ install_xrf_go() {
         return
     fi
     
-    sudo install -m 755 "$temp_file" /usr/local/bin/xrf
+    $SUDO_CMD install -m 755 "$temp_file" /usr/local/bin/xrf
     rm -f "$temp_file"
     
     success "XRF-Go 安装完成: $(xrf version | grep 'XRF-Go 版本')"
@@ -155,7 +168,7 @@ compile_from_source() {
     info "编译中..."
     go build -ldflags="-s -w" -o xrf cmd/xrf/main.go
     
-    sudo install -m 755 xrf /usr/local/bin/
+    $SUDO_CMD install -m 755 xrf /usr/local/bin/
     
     rm -rf "$temp_dir"
     success "XRF-Go 编译安装完成"
@@ -165,8 +178,8 @@ compile_from_source() {
 setup_config() {
     info "设置配置目录..."
     
-    sudo mkdir -p /etc/xray/confs
-    sudo chown $(whoami):$(whoami) /etc/xray/confs
+    $SUDO_CMD mkdir -p /etc/xray/confs
+    $SUDO_CMD chown $(whoami):$(whoami) /etc/xray/confs
     
     success "配置目录创建完成: /etc/xray/confs"
 }
@@ -191,10 +204,10 @@ LimitNOFILE=1048576
 [Install]
 WantedBy=multi-user.target'
     
-    echo "$service_content" | sudo tee /etc/systemd/system/xray.service >/dev/null
+    echo "$service_content" | $SUDO_CMD tee /etc/systemd/system/xray.service >/dev/null
     
-    sudo systemctl daemon-reload
-    sudo systemctl enable xray.service
+    $SUDO_CMD systemctl daemon-reload
+    $SUDO_CMD systemctl enable xray.service
     
     success "Xray 服务配置完成"
 }
@@ -218,8 +231,8 @@ optimize_system() {
     # 启用 BBR（如果支持）
     if [[ -f /proc/sys/net/ipv4/tcp_congestion_control ]]; then
         if ! sysctl net.ipv4.tcp_congestion_control | grep -q bbr; then
-            echo 'net.core.default_qdisc = fq' | sudo tee -a /etc/sysctl.conf
-            echo 'net.ipv4.tcp_congestion_control = bbr' | sudo tee -a /etc/sysctl.conf
+            echo 'net.core.default_qdisc = fq' | $SUDO_CMD tee -a /etc/sysctl.conf
+            echo 'net.ipv4.tcp_congestion_control = bbr' | $SUDO_CMD tee -a /etc/sysctl.conf
             info "BBR 拥塞控制已配置（重启后生效）"
         else
             info "BBR 拥塞控制已启用"
@@ -227,8 +240,8 @@ optimize_system() {
     fi
     
     # 优化文件描述符限制
-    echo '* soft nofile 1048576' | sudo tee -a /etc/security/limits.conf
-    echo '* hard nofile 1048576' | sudo tee -a /etc/security/limits.conf
+    echo '* soft nofile 1048576' | $SUDO_CMD tee -a /etc/security/limits.conf
+    echo '* hard nofile 1048576' | $SUDO_CMD tee -a /etc/security/limits.conf
     
     success "系统优化完成"
 }
@@ -238,13 +251,23 @@ show_completion() {
     echo
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN} XRF-Go 安装完成！${NC}"
+    if [[ $EUID -eq 0 ]]; then
+        echo -e "${GREEN} (已使用 root 用户权限安装)${NC}"
+    else
+        echo -e "${GREEN} (已使用 sudo 权限安装)${NC}"
+    fi
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo
     echo -e "${BLUE}快速开始:${NC}"
     echo "  1. 添加协议:    xrf add vr --port 443 --domain your.domain.com"
     echo "  2. 列出协议:    xrf list"
-    echo "  3. 启动服务:    sudo systemctl start xray"
-    echo "  4. 查看状态:    xrf status"
+    if [[ $EUID -eq 0 ]]; then
+        echo "  3. 启动服务:    systemctl start xray"
+        echo "  4. 查看状态:    xrf status"
+    else
+        echo "  3. 启动服务:    sudo systemctl start xray"
+        echo "  4. 查看状态:    xrf status"
+    fi
     echo "  5. 获取帮助:    xrf --help"
     echo
     echo -e "${BLUE}常用命令:${NC}"
