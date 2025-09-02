@@ -78,7 +78,7 @@ func TestServiceManager_GenerateServiceFile_Logic(t *testing.T) {
 	if config.IsTestEnvironment() {
 		expectedDuration = 500 * time.Millisecond // CI环境允许更长时间
 	}
-	
+
 	if elapsed > expectedDuration {
 		t.Errorf("generateServiceFile() took %v, expected < %v", elapsed, expectedDuration)
 	}
@@ -463,7 +463,7 @@ func TestServiceManager_GetSystemUserGroup_Logic(t *testing.T) {
 	if config.IsTestEnvironment() {
 		expectedDuration = 500 * time.Millisecond // CI环境允许更长时间
 	}
-	
+
 	if elapsed > expectedDuration {
 		t.Errorf("getSystemUserGroup() took %v, expected < %v", elapsed, expectedDuration)
 	}
