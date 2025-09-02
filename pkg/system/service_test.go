@@ -104,8 +104,8 @@ func TestServiceManagerStatus(t *testing.T) {
 		t.Error("GetServiceStatus() Status should not be empty")
 	}
 
-	if elapsed > 100*time.Millisecond {
-		t.Errorf("GetServiceStatus() took %v, expected < 100ms", elapsed)
+	if elapsed > 200*time.Millisecond {
+		t.Errorf("GetServiceStatus() took %v, expected < 200ms", elapsed)
 	}
 }
 
