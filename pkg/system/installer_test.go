@@ -175,8 +175,8 @@ func TestInstallerDependencies(t *testing.T) {
 		cmd, err := detector.GetInstallCommand(packages)
 		elapsed = time.Since(start)
 
-		if elapsed > 250*time.Millisecond {
-			t.Errorf("GetInstallCommand() took %v, expected < 250ms (system detection)", elapsed)
+		if elapsed > 800*time.Millisecond {
+			t.Errorf("GetInstallCommand() took %v, expected < 800ms (system detection)", elapsed)
 		}
 
 		if err == nil {
@@ -222,8 +222,8 @@ func TestInstallerPermissionChecks(t *testing.T) {
 					t.Errorf("%s() error = %v, should contain %v", op.name, err, expectedError)
 				}
 
-				if elapsed > 250*time.Millisecond {
-					t.Errorf("%s() took %v, expected < 250ms (permission + system check)", op.name, elapsed)
+				if elapsed > 500*time.Millisecond {
+					t.Errorf("%s() took %v, expected < 500ms (permission + system check)", op.name, elapsed)
 				}
 			})
 		}

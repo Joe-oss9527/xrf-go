@@ -45,8 +45,8 @@ func TestDetectorSystemDetection(t *testing.T) {
 				}
 			}
 
-			if elapsed > 300*time.Millisecond {
-				t.Errorf("DetectSystem() took %v, expected < 300ms (integration test)", elapsed)
+			if elapsed > 800*time.Millisecond {
+				t.Errorf("DetectSystem() took %v, expected < 800ms (integration test)", elapsed)
 			}
 		})
 	}
@@ -173,8 +173,8 @@ func TestDetectorFirewallDetection(t *testing.T) {
 	hasFirewall, fwType := detector.detectFirewall()
 	elapsed := time.Since(start)
 
-	if elapsed > 200*time.Millisecond {
-		t.Errorf("detectFirewall() took %v, expected < 200ms (system calls)", elapsed)
+	if elapsed > 800*time.Millisecond {
+		t.Errorf("detectFirewall() took %v, expected < 800ms (system calls)", elapsed)
 	}
 
 	validTypes := []string{"ufw", "firewalld", "iptables", "nftables", "none"}

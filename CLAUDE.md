@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Project memory file for XRF-Go v1.0.0-RC2 - provides specific development guidance and conventions for Claude Code.
+Project memory file for XRF-Go v1.0.0-RC4 - provides specific development guidance and conventions for Claude Code.
 
 ## Project Overview
 
@@ -137,14 +137,15 @@ if err := validateConfigAfterChange(); err != nil {
 - Benchmark performance-critical functions
 - Test rollback mechanisms
 
-### Testing Best Practices (Based on TLS Test Fix Experience)
-- **Test Environment Detection**: Use `IsTestEnvironment()` to auto-detect test mode
+### Testing Best Practices (Based on System Module Implementation)
+- **Test Environment Detection**: Use `config.IsTestEnvironment()` to auto-detect test mode (unified approach)
 - **Certificate Management**: Generate test certificates dynamically using `GetTestCertificate()`
 - **Test Isolation**: Each test uses independent temporary directories
 - **Performance Targets**: Set realistic goals based on actual operations:
-  - Unit tests (skip validation): 10-50ms
-  - Integration tests (full flow): 50-150ms
+  - Unit tests (pure logic): <10ms
+  - Integration tests (system calls): 100-400ms
   - TLS protocols (cert generation): +50-100ms extra
+  - Concurrent operations: 500-1000ms (multiple parallel operations)
 - **Error Handling in Tests**: Always check return values with proper Go practices:
   ```go
   if err := configMgr.Initialize(); err != nil {
@@ -154,13 +155,15 @@ if err := validateConfigAfterChange(); err != nil {
       b.Errorf("Operation failed: %v", err)   // For benchmark non-fatal
   }
   ```
-- **Test Architecture**: Implement 3-layer testing:
-  1. Unit tests (`*_unit_test.go`) - Pure logic, skip I/O
-  2. Integration tests (`*_integration_test.go`) - Full flow with validation
-  3. Main tests (`*_test.go`) - Mixed functional tests
+- **Test Architecture**: Implement 3-layer testing (IMPLEMENTED):
+  1. Unit tests (`*_unit_test.go`) - Pure logic, skip I/O, <10ms
+  2. Integration tests (`*_integration_test.go`) - Full flow with validation, 100-400ms
+  3. Main tests (`*_test.go`) - Mixed functional tests, realistic timeouts
+- **Parallel Testing**: All tests use `t.Parallel()` for concurrent execution
+- **Version Consistency**: Always use latest Xray version (currently v25.8.31)
 - **Environment Variables**: 
-  - `XRF_TEST_MODE=1` - Enable test certificate generation
-  - `XRF_SKIP_VALIDATION=1` - Skip Xray validation for speed
+  - `config.IsTestEnvironment()` detects go test automatically
+  - `XRF_TEST_MODE=1` - Legacy support (deprecated)
 
 ## Dependencies and Constraints
 
