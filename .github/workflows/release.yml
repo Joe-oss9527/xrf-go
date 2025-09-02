@@ -54,7 +54,7 @@ jobs:
     
     - name: Run tests
       run: |
-        go test -v ./...
+        go test -v -timeout=120s ./...
     
     - name: Build Linux AMD64
       env:
