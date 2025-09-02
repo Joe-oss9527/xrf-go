@@ -59,7 +59,7 @@ xrf install                                    # 默认安装 VLESS-REALITY
 xrf install --protocol vw --domain example.com # 指定协议和域名
 
 # ➕ 添加协议（支持别名）
-xrf add vr --port 443 --domain example.com    # VLESS-REALITY
+xrf add vr                                    # VLESS-REALITY (零配置推荐)
 xrf add vw --port 443 --domain example.com    # VLESS-WebSocket-TLS
 xrf add vmess --port 80 --path /ws            # VMess-WebSocket
 xrf add tw --port 443 --domain example.com    # Trojan-WebSocket-TLS
@@ -98,7 +98,7 @@ xrf restore [backup-file]                    # 恢复配置
 
 | 别名 | 完整协议名 | 描述 |
 |------|-----------|------|
-| `vr` | VLESS-REALITY | 最新抗审查技术，**强烈推荐** |
+| `vr` | VLESS-REALITY | 最新抗审查技术，**零配置强烈推荐** |
 | `vw` | VLESS-WebSocket-TLS | 需要域名和 TLS 证书 |
 | `vmess` | VMess-WebSocket-TLS | 兼容性最好，广泛支持 |
 | `tw` | Trojan-WebSocket-TLS | 高伪装性，需要域名证书 |
@@ -163,7 +163,7 @@ xrf --no-color list
 
 ```bash
 # 一次安装多个协议
-xrf install --protocols vr,vw,vmess --domain example.com
+xrf install --protocols vr,vw,vmess --domain example.com  # vr零配置，vw和tw需要域名
 
 # 批量生成工具
 for i in {1..5}; do xrf generate uuid; done
@@ -172,12 +172,11 @@ for i in {1..5}; do xrf generate uuid; done
 ### REALITY 配置示例
 
 ```bash
-# 添加 VLESS-REALITY（推荐配置）
-xrf add vr \
-  --port 443 \
-  --domain example.com \
-  --dest www.microsoft.com \
-  --server-name www.microsoft.com
+# 添加 VLESS-REALITY（零配置推荐）
+xrf add vr                                    # 零配置，使用默认端口443和Microsoft伪装
+
+# 自定义配置（可选）
+xrf add vr --port 8443 --sni www.microsoft.com
 ```
 
 ## 🛠️ 开发

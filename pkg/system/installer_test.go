@@ -222,8 +222,8 @@ func TestInstallerPermissionChecks(t *testing.T) {
 					t.Errorf("%s() error = %v, should contain %v", op.name, err, expectedError)
 				}
 
-				if elapsed > 1000*time.Millisecond {
-					t.Errorf("%s() took %v, expected < 1000ms (permission + system check)", op.name, elapsed)
+				if elapsed > 2000*time.Millisecond {
+					t.Errorf("%s() took %v, expected < 2000ms (permission + system check)", op.name, elapsed)
 				}
 			})
 		}

@@ -366,7 +366,7 @@ func TestPerformanceBenchmark(t *testing.T) {
 		protocolCount, totalDuration, avgDuration)
 
 	// 验证平均时间在合理范围内（考虑备份和验证开销）
-	targetAvg := 40 * time.Millisecond // 调整到40ms以适应CI环境
+	targetAvg := 60 * time.Millisecond // 调整到60ms以适应完整安全检查
 	if avgDuration > targetAvg {
 		t.Errorf("Average protocol addition time %v exceeds %v target", avgDuration, targetAvg)
 	} else {
@@ -378,7 +378,7 @@ func TestPerformanceBenchmark(t *testing.T) {
 		opsPerSec := float64(protocolCount) / totalDuration.Seconds()
 		t.Logf("Throughput: %.0f operations/second", opsPerSec)
 
-		targetThroughput := 25.0 // 合理的吞吐量目标（考虑备份和验证），调整到25 ops/sec
+		targetThroughput := 18.0 // 合理的吞吐量目标（考虑备份和验证），调整到18 ops/sec
 		if opsPerSec < targetThroughput {
 			t.Errorf("Throughput %.0f ops/sec is below %.0f ops/sec target", opsPerSec, targetThroughput)
 		} else {

@@ -35,10 +35,10 @@ var SupportedProtocols = []Protocol{
 		Aliases:             []string{"vr", "vless", "reality"},
 		DefaultPort:         443,
 		RequiresTLS:         false,
-		RequiresDomain:      true,
+		RequiresDomain:      false,
 		SupportedTransports: []string{"tcp"},
 		Template:            "vless-reality",
-		Description:         "VLESS with REALITY transport (recommended)",
+		Description:         "VLESS with REALITY transport (recommended, zero-config)",
 	},
 	{
 		Name:                "VLESS-WebSocket-TLS",

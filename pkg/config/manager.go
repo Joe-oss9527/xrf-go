@@ -848,6 +848,13 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 			if destStr, ok := dest.(string); ok {
 				data.Dest = destStr
 			}
+		} else if domain, exists := options["domain"]; exists {
+			// 兼容处理误用的domain参数
+			if domainStr, ok := domain.(string); ok {
+				data.Dest = domainStr
+				utils.PrintWarning("VLESS-REALITY不需要域名证书，已将 '%s' 作为伪装目标使用", domainStr)
+				utils.PrintInfo("建议使用: --dest %s", domainStr)
+			}
 		}
 		if data.Dest == "" {
 			data.Dest = "www.microsoft.com"

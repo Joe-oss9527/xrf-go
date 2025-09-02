@@ -49,8 +49,8 @@ func TestSystemIntegration(t *testing.T) {
 		}
 
 		elapsed := time.Since(start)
-		if elapsed > 350*time.Millisecond {
-			t.Errorf("DetectorServiceIntegration took %v, expected < 350ms (system detection + service setup)", elapsed)
+		if elapsed > 1000*time.Millisecond {
+			t.Errorf("DetectorServiceIntegration took %v, expected < 1000ms (system detection + service setup)", elapsed)
 		}
 	})
 

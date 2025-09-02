@@ -199,9 +199,9 @@ func createInstallCommand() *cobra.Command {
 		Long: `一键安装 Xray 服务，自动检测系统并配置服务。
 
 示例:
-  xrf install                                    # 默认安装 VLESS-REALITY
+  xrf install                                    # 默认安装 VLESS-REALITY (零配置)
   xrf install --protocol vless-reality           # 指定协议
-  xrf install --domain example.com --protocols vw,tw  # 多协议安装`,
+  xrf install --protocols vw,tw --domain example.com  # 多协议安装(TLS协议需要域名)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			utils.PrintSection("XRF-Go 安装程序")
 
@@ -299,6 +299,7 @@ func createAddCommand() *cobra.Command {
 	var (
 		port     int
 		domain   string
+		dest     string
 		path     string
 		password string
 		uuid     string
@@ -321,7 +322,9 @@ func createAddCommand() *cobra.Command {
   • hu        - VLESS-HTTPUpgrade
 
 示例:
-  xrf add vr --port 443 --domain example.com    # 添加 VLESS-REALITY
+  xrf add vr                                    # 添加 VLESS-REALITY (零配置)
+  xrf add vr --port 8443                        # 自定义端口
+  xrf add vr --sni www.microsoft.com            # 自定义伪装目标
   xrf add vmess --port 80 --path /ws            # 添加 VMess-WebSocket
   xrf add ss --method aes-256-gcm               # 添加 Shadowsocks`,
 		Args: cobra.ExactArgs(1),
@@ -339,6 +342,9 @@ func createAddCommand() *cobra.Command {
 			if domain != "" {
 				options["domain"] = domain
 				options["host"] = domain
+			}
+			if dest != "" {
+				options["dest"] = dest
 			}
 			if path != "" {
 				options["path"] = path
@@ -392,7 +398,8 @@ func createAddCommand() *cobra.Command {
 	}
 
 	cmd.Flags().IntVar(&port, "port", 0, "端口")
-	cmd.Flags().StringVar(&domain, "domain", "", "域名")
+	cmd.Flags().StringVar(&domain, "domain", "", "域名 (仅TLS协议需要)")
+	cmd.Flags().StringVar(&dest, "sni", "", "REALITY伪装目标SNI (如: www.microsoft.com)")
 	cmd.Flags().StringVar(&path, "path", "", "路径")
 	cmd.Flags().StringVar(&password, "password", "", "密码")
 	cmd.Flags().StringVar(&uuid, "uuid", "", "UUID")

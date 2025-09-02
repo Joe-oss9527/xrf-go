@@ -209,16 +209,19 @@ WantedBy=multi-user.target'
     success "Xray 服务配置完成"
 }
 
-# 初始化配置
+# 初始化配置并启动服务
 init_config() {
-    info "初始化 XRF-Go 配置..."
+    info "初始化 XRF-Go 配置并启动服务..."
     
-    xrf install --no-start 2>/dev/null || {
-        # 如果没有 --no-start 选项，使用基本的初始化
+    # 直接使用xrf install，它会自动配置VLESS-REALITY并启动服务
+    if xrf install 2>/dev/null; then
+        success "XRF-Go 配置完成，服务已启动"
+    else
+        # 如果install命令失败，尝试基本初始化
+        warning "xrf install 失败，尝试手动初始化..."
         xrf --confdir /etc/xray/confs >/dev/null 2>&1 || true
-    }
-    
-    success "配置初始化完成"
+        info "请稍后手动运行 'xrf install' 来配置协议"
+    fi
 }
 
 # 优化系统
@@ -256,16 +259,11 @@ show_completion() {
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo
     echo -e "${BLUE}快速开始:${NC}"
-    echo "  1. 添加协议:    xrf add vr --port 443 --domain your.domain.com"
-    echo "  2. 列出协议:    xrf list"
-    if [[ $EUID -eq 0 ]]; then
-        echo "  3. 启动服务:    systemctl start xray"
-        echo "  4. 查看状态:    xrf status"
-    else
-        echo "  3. 启动服务:    sudo systemctl start xray"
-        echo "  4. 查看状态:    xrf status"
-    fi
-    echo "  5. 获取帮助:    xrf --help"
+    echo "  1. 查看配置:    xrf list                 # VLESS-REALITY已配置并启动"
+    echo "  2. 获取链接:    xrf url vless_reality    # 生成客户端连接链接"
+    echo "  3. 添加更多:    xrf add vr --port 8443   # 添加更多协议"
+    echo "  4. 查看状态:    xrf status               # 检查服务状态"
+    echo "  5. 查看日志:    xrf logs                 # 查看运行日志"
     echo
     echo -e "${BLUE}常用命令:${NC}"
     echo "  • xrf add [protocol]     - 添加协议配置"
