@@ -40,15 +40,10 @@ GIT_COMMIT=${GIT_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo "unkno
 # 构建标志
 BUILD_FLAGS="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}"
 
-# 支持的平台
+# 支持的平台（专注于主流Linux服务器平台）
 PLATFORMS=(
     "linux/amd64"
     "linux/arm64"
-    "linux/armv7"
-    "darwin/amd64" 
-    "darwin/arm64"
-    "windows/amd64"
-    "freebsd/amd64"
 )
 
 # 检查环境
