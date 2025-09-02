@@ -101,12 +101,22 @@ check_dependencies() {
 install_xray() {
     info "正在安装 Xray..."
     
-    local xray_version="v25.8.3"  # 可以动态获取最新版本
+    # 动态获取最新版本
+    info "获取 Xray 最新版本..."
+    local xray_version=$(curl -fsSL "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | grep '"tag_name":' | cut -d'"' -f4)
+    
+    if [[ -z "$xray_version" ]]; then
+        warning "无法获取最新版本，使用默认版本 v25.8.31"
+        xray_version="v25.8.31"
+    fi
+    
     local download_url="https://github.com/XTLS/Xray-core/releases/download/${xray_version}/Xray-linux-${ARCH}.zip"
     local temp_dir=$(mktemp -d)
     
     info "下载 Xray ${xray_version} for ${ARCH}..."
-    curl -fsSL -o "${temp_dir}/xray.zip" "$download_url"
+    if ! curl -fsSL -o "${temp_dir}/xray.zip" "$download_url"; then
+        error "下载 Xray 失败，请检查网络连接或稍后重试"
+    fi
     
     cd "$temp_dir"
     unzip -q xray.zip

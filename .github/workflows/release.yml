@@ -45,7 +45,13 @@ jobs:
     - name: Install Xray for testing
       run: |
         # Download and install Xray for configuration validation in tests
-        XRAY_VERSION="v25.8.3"
+        # Get latest version dynamically
+        XRAY_VERSION=$(curl -fsSL "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | grep '"tag_name":' | cut -d'"' -f4)
+        if [ -z "$XRAY_VERSION" ]; then
+          echo "Failed to get latest version, using fallback"
+          XRAY_VERSION="v25.8.31"
+        fi
+        echo "Installing Xray $XRAY_VERSION"
         wget -O /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-64.zip"
         unzip -d /tmp /tmp/xray.zip
         sudo cp /tmp/xray /usr/local/bin/

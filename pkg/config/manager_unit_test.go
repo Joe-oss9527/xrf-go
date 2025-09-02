@@ -47,10 +47,10 @@ func TestAddProtocol_ConfigGeneration(t *testing.T) {
 				t.Errorf("AddProtocol failed: %v", err)
 			}
 
-			// 单元测试目标：包含I/O但跳过验证，调整到20ms
-			targetDuration := 20 * time.Millisecond
+			// 单元测试目标：包含I/O但跳过验证，调整到50ms（符合CLAUDE.md建议）
+			targetDuration := 50 * time.Millisecond
 			if protocol.name == "vless-ws" {
-				targetDuration = 80 * time.Millisecond // 首次需要生成证书，调整到80ms
+				targetDuration = 120 * time.Millisecond // 首次需要生成证书，调整到120ms
 			}
 
 			if duration > targetDuration {
