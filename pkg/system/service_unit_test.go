@@ -39,16 +39,22 @@ func TestServiceManager_GenerateServiceFile_Logic(t *testing.T) {
 		}
 	}
 
-	// 验证关键配置项
+	// 验证关键配置项（不包含动态用户/组）
 	requiredConfigs := []string{
 		"Description=Xray Service",
-		"User=" + ServiceUser,
-		"Group=" + ServiceGroup,
 		"Type=simple",
 		"Restart=on-failure",
 		"NoNewPrivileges=true",
 		"ProtectSystem=strict",
 		"WantedBy=multi-user.target",
+	}
+
+	// 单独验证用户和组字段存在
+	if !strings.Contains(serviceContent, "User=") {
+		t.Error("generateServiceFile() missing User field")
+	}
+	if !strings.Contains(serviceContent, "Group=") {
+		t.Error("generateServiceFile() missing Group field")
 	}
 
 	for _, config := range requiredConfigs {
@@ -352,14 +358,28 @@ func TestServiceManager_Constants_Logic(t *testing.T) {
 			name:  "ServiceUser should be safe",
 			value: ServiceUser,
 			validate: func(s string) bool {
-				return s != "" && s != "root" && !strings.Contains(s, " ")
+				return s == "xray" && !strings.Contains(s, " ")
 			},
 		},
 		{
 			name:  "ServiceGroup should be safe",
 			value: ServiceGroup,
 			validate: func(s string) bool {
-				return s != "" && s != "root" && !strings.Contains(s, " ")
+				return s == "xray" && !strings.Contains(s, " ")
+			},
+		},
+		{
+			name:  "ServiceHome should be absolute path",
+			value: ServiceHome,
+			validate: func(s string) bool {
+				return strings.HasPrefix(s, "/var/lib/") && s != ""
+			},
+		},
+		{
+			name:  "ServiceShell should be nologin",
+			value: ServiceShell,
+			validate: func(s string) bool {
+				return strings.Contains(s, "nologin") || strings.Contains(s, "false")
 			},
 		},
 	}
@@ -379,6 +399,84 @@ func TestServiceManager_Constants_Logic(t *testing.T) {
 			// 简单验证应该瞬时完成
 			if elapsed > 2*time.Millisecond {
 				t.Errorf("Constant validation took %v, expected < 2ms", elapsed)
+			}
+		})
+	}
+}
+
+// TestServiceManager_GetSystemUserGroup_Logic 测试用户组选择逻辑
+func TestServiceManager_GetSystemUserGroup_Logic(t *testing.T) {
+	t.Parallel()
+
+	// 验证测试环境
+	if !config.IsTestEnvironment() {
+		t.Skip("Not in test environment")
+	}
+
+	detector := NewDetector()
+	sm := NewServiceManager(detector)
+
+	start := time.Now()
+	user, group := sm.getSystemUserGroup()
+	elapsed := time.Since(start)
+
+	// 验证返回值不为空
+	if user == "" || group == "" {
+		t.Error("getSystemUserGroup() returned empty user or group")
+	}
+
+	// 验证用户组合理性
+	validUsers := []string{"xray", "nobody"}
+	validGroups := []string{"xray", "nobody", "nogroup"}
+
+	userValid := false
+	for _, v := range validUsers {
+		if user == v {
+			userValid = true
+			break
+		}
+	}
+
+	groupValid := false
+	for _, v := range validGroups {
+		if group == v {
+			groupValid = true
+			break
+		}
+	}
+
+	if !userValid {
+		t.Errorf("Invalid user: %s", user)
+	}
+	if !groupValid {
+		t.Errorf("Invalid group: %s", group)
+	}
+
+	// 用户组选择应该很快
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("getSystemUserGroup() took %v, expected < 100ms", elapsed)
+	}
+}
+
+// TestServiceManager_Constants_Updated 测试更新后的常量值
+func TestServiceManager_Constants_Updated(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		value    string
+		expected string
+	}{
+		{"ServiceUser should be xray", ServiceUser, "xray"},
+		{"ServiceGroup should be xray", ServiceGroup, "xray"},
+		{"ServiceHome should be /var/lib/xray", ServiceHome, "/var/lib/xray"},
+		{"ServiceShell should contain nologin", ServiceShell, "/usr/sbin/nologin"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.value != tt.expected {
+				t.Errorf("%s = %v, want %v", tt.name, tt.value, tt.expected)
 			}
 		})
 	}

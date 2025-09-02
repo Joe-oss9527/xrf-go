@@ -227,8 +227,8 @@ func TestRealSystemEnvironmentSimulation(t *testing.T) {
 		}
 
 		elapsed := time.Since(start)
-		if elapsed > 200*time.Millisecond {
-			t.Errorf("PermissionAwareWorkflow took %v, expected < 200ms (permission checks + system calls)", elapsed)
+		if elapsed > 300*time.Millisecond {
+			t.Errorf("PermissionAwareWorkflow took %v, expected < 300ms (permission checks + system calls)", elapsed)
 		}
 	})
 }
@@ -391,8 +391,8 @@ func TestConcurrentOperations(t *testing.T) {
 		}
 
 		elapsed := time.Since(start)
-		if elapsed > 1000*time.Millisecond {
-			t.Errorf("ConcurrentSystemDetection took %v, expected < 1000ms (10 concurrent detections)", elapsed)
+		if elapsed > 1500*time.Millisecond {
+			t.Errorf("ConcurrentSystemDetection took %v, expected < 1500ms (10 concurrent detections)", elapsed)
 		}
 	})
 

@@ -14,8 +14,10 @@ import (
 const (
 	ServiceName        = "xray"
 	SystemdServicePath = "/etc/systemd/system/xray.service"
-	ServiceUser        = "nobody"
-	ServiceGroup       = "nogroup"
+	ServiceUser        = "xray" // 专用服务用户
+	ServiceGroup       = "xray" // 专用服务组
+	ServiceHome        = "/var/lib/xray"
+	ServiceShell       = "/usr/sbin/nologin"
 )
 
 // ServiceManager 服务管理器
@@ -55,12 +57,22 @@ func (sm *ServiceManager) InstallService() error {
 
 	utils.PrintInfo("安装 Xray 服务...")
 
-	// 生成服务文件内容
+	// 确保服务用户和组存在
+	if err := sm.ensureServiceUserAndGroup(); err != nil {
+		utils.PrintWarning("创建专用用户失败，将使用降级方案: %v", err)
+	}
+
+	// 生成服务文件内容（使用动态用户选择）
 	serviceContent := sm.generateServiceFile()
 
 	// 写入服务文件
 	if err := os.WriteFile(SystemdServicePath, []byte(serviceContent), 0644); err != nil {
 		return fmt.Errorf("写入服务文件失败: %w", err)
+	}
+
+	// 设置配置目录权限
+	if err := sm.setDirectoryPermissions(); err != nil {
+		utils.PrintWarning("设置目录权限失败: %v", err)
 	}
 
 	// 重新加载 systemd
@@ -79,6 +91,8 @@ func (sm *ServiceManager) InstallService() error {
 
 // generateServiceFile 生成 systemd 服务文件内容
 func (sm *ServiceManager) generateServiceFile() string {
+	user, group := sm.getSystemUserGroup()
+
 	return fmt.Sprintf(`[Unit]
 Description=Xray Service
 Documentation=https://github.com/XTLS/Xray-core
@@ -97,11 +111,13 @@ LimitNOFILE=1000000
 # Security settings
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=%s
+ReadWritePaths=%s /var/lib/xray
 ProtectHome=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 
 # Network settings
 PrivateDevices=true
@@ -111,7 +127,7 @@ RestrictNamespaces=true
 
 [Install]
 WantedBy=multi-user.target
-`, ServiceUser, ServiceGroup, XrayBinaryPath, XrayConfsDir, filepath.Dir(XrayConfsDir))
+`, user, group, XrayBinaryPath, XrayConfsDir, filepath.Dir(XrayConfsDir))
 }
 
 // StartService 启动服务
@@ -417,6 +433,11 @@ func (sm *ServiceManager) IsServiceInstalled() bool {
 
 // UninstallService 卸载服务
 func (sm *ServiceManager) UninstallService() error {
+	return sm.UninstallServiceWithOptions(false)
+}
+
+// UninstallServiceWithOptions 卸载服务（带选项）
+func (sm *ServiceManager) UninstallServiceWithOptions(purgeUser bool) error {
 	if !sm.detector.IsRoot() {
 		return fmt.Errorf("需要 root 权限才能卸载服务")
 	}
@@ -439,8 +460,34 @@ func (sm *ServiceManager) UninstallService() error {
 		utils.PrintWarning("重新加载 systemd 失败: %v", err)
 	}
 
+	// 可选：删除服务用户和组
+	if purgeUser && ServiceUser == "xray" {
+		sm.removeServiceUser()
+	}
+
 	utils.PrintSuccess("Xray 服务已卸载")
 	return nil
+}
+
+// removeServiceUser 删除服务用户和组
+func (sm *ServiceManager) removeServiceUser() {
+	// 删除用户
+	if exec.Command("getent", "passwd", ServiceUser).Run() == nil {
+		if err := exec.Command("userdel", ServiceUser).Run(); err != nil {
+			utils.PrintWarning("删除用户 %s 失败: %v", ServiceUser, err)
+		} else {
+			utils.PrintInfo("已删除用户: %s", ServiceUser)
+		}
+	}
+
+	// 删除组
+	if exec.Command("getent", "group", ServiceGroup).Run() == nil {
+		if err := exec.Command("groupdel", ServiceGroup).Run(); err != nil {
+			utils.PrintWarning("删除组 %s 失败: %v", ServiceGroup, err)
+		} else {
+			utils.PrintInfo("已删除组: %s", ServiceGroup)
+		}
+	}
 }
 
 // reloadSystemd 重新加载 systemd 配置
@@ -486,37 +533,152 @@ func (sm *ServiceManager) ValidateConfig() error {
 	return nil
 }
 
-// ConfigureUser 配置服务用户
-func (sm *ServiceManager) ConfigureUser() error {
-	if !sm.detector.IsRoot() {
-		return fmt.Errorf("需要 root 权限才能配置用户")
+// ensureServiceUserAndGroup 确保服务用户和组存在
+func (sm *ServiceManager) ensureServiceUserAndGroup() error {
+	// 1. 检查并创建组
+	if err := exec.Command("getent", "group", ServiceGroup).Run(); err != nil {
+		// 创建系统组
+		if err := exec.Command("groupadd", "--system", ServiceGroup).Run(); err != nil {
+			// 尝试不同的命令格式（兼容不同发行版）
+			if err := exec.Command("groupadd", "-r", ServiceGroup).Run(); err != nil {
+				return fmt.Errorf("创建组 %s 失败: %w", ServiceGroup, err)
+			}
+		}
+		utils.PrintInfo("创建系统组: %s", ServiceGroup)
 	}
 
-	// 检查用户是否存在
-	cmd := exec.Command("id", ServiceUser)
-	if err := cmd.Run(); err != nil {
-		utils.PrintInfo("创建服务用户: %s", ServiceUser)
+	// 2. 检查并创建用户
+	if err := exec.Command("getent", "passwd", ServiceUser).Run(); err != nil {
+		// 检测 shell 路径
+		shell := ServiceShell
+		if _, err := os.Stat(shell); err != nil {
+			// 尝试其他常见路径
+			for _, altShell := range []string{"/sbin/nologin", "/bin/false"} {
+				if _, err := os.Stat(altShell); err == nil {
+					shell = altShell
+					break
+				}
+			}
+		}
 
 		// 创建系统用户
-		createCmd := exec.Command("useradd", "-r", "-s", "/bin/false", ServiceUser)
-		if output, err := createCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("创建用户失败: %w\n输出: %s", err, string(output))
+		cmd := exec.Command("useradd",
+			"--system",
+			"--gid", ServiceGroup,
+			"--home-dir", ServiceHome,
+			"--no-create-home",
+			"--shell", shell,
+			"--comment", "Xray proxy service user",
+			ServiceUser)
+
+		if err := cmd.Run(); err != nil {
+			// 尝试简化版本（兼容旧版本或不同发行版）
+			cmd = exec.Command("useradd", "-r", "-g", ServiceGroup, "-s", shell, ServiceUser)
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("创建用户 %s 失败: %w", ServiceUser, err)
+			}
 		}
+		utils.PrintInfo("创建系统用户: %s", ServiceUser)
+	}
+
+	return nil
+}
+
+// getSystemUserGroup 根据系统类型获取合适的用户和组
+func (sm *ServiceManager) getSystemUserGroup() (user, group string) {
+	// 优先使用专用用户
+	if exec.Command("getent", "passwd", "xray").Run() == nil {
+		return "xray", "xray"
+	}
+
+	// 基于发行版选择合适的降级方案
+	sysInfo := sm.detector.GetSystemInfo()
+	if sysInfo != nil {
+		switch sysInfo.Distribution {
+		case "rocky", "rhel", "centos", "fedora", "almalinux":
+			// RHEL系列使用 nobody/nobody
+			if exec.Command("getent", "group", "nobody").Run() == nil {
+				return "nobody", "nobody"
+			}
+		case "ubuntu", "debian", "raspbian":
+			// Debian系列使用 nobody/nogroup
+			if exec.Command("getent", "group", "nogroup").Run() == nil {
+				return "nobody", "nogroup"
+			}
+		case "alpine":
+			// Alpine Linux
+			return "nobody", "nobody"
+		}
+	}
+
+	// 默认创建专用用户
+	if err := sm.ensureServiceUserAndGroup(); err == nil {
+		return ServiceUser, ServiceGroup
+	}
+
+	// 最后的降级选项
+	return "nobody", "nobody"
+}
+
+// setDirectoryPermissions 设置目录权限
+func (sm *ServiceManager) setDirectoryPermissions() error {
+	// 获取用户和组的 UID/GID
+	cmd := exec.Command("id", "-u", ServiceUser)
+	uidOutput, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("获取用户 UID 失败: %w", err)
+	}
+
+	cmd = exec.Command("id", "-g", ServiceGroup)
+	gidOutput, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("获取组 GID 失败: %w", err)
+	}
+
+	uid := 0
+	gid := 0
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(uidOutput)), "%d", &uid); err != nil {
+		return fmt.Errorf("解析用户 UID 失败: %w", err)
+	}
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(gidOutput)), "%d", &gid); err != nil {
+		return fmt.Errorf("解析组 GID 失败: %w", err)
 	}
 
 	// 设置目录权限
 	directories := []string{
 		XrayConfigDir,
 		XrayConfsDir,
+		ServiceHome,
 		"/var/log/xray",
 	}
 
 	for _, dir := range directories {
-		if err := os.Chown(dir, -1, -1); err != nil {
-			// 简化处理，实际应该获取用户和组的 UID/GID
-			utils.PrintWarning("设置目录权限失败: %s", dir)
+		// 创建目录（如果不存在）
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			utils.PrintWarning("创建目录失败 %s: %v", dir, err)
+			continue
+		}
+
+		// 设置权限
+		if err := os.Chown(dir, uid, gid); err != nil {
+			utils.PrintWarning("设置目录权限失败 %s: %v", dir, err)
 		}
 	}
 
 	return nil
+}
+
+// ConfigureUser 配置服务用户（保留兼容性）
+func (sm *ServiceManager) ConfigureUser() error {
+	if !sm.detector.IsRoot() {
+		return fmt.Errorf("需要 root 权限才能配置用户")
+	}
+
+	// 使用新的用户管理方法
+	if err := sm.ensureServiceUserAndGroup(); err != nil {
+		return err
+	}
+
+	// 设置目录权限
+	return sm.setDirectoryPermissions()
 }
