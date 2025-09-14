@@ -5,9 +5,13 @@
 
 set -euo pipefail
 
-# 检查并加载共享工具函数
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMMON_SH="${SCRIPT_DIR}/common.sh"
+# 检查并加载共享工具函数（兼容 curl | bash 场景）
+SCRIPT_DIR=""
+if [[ -n "${BASH_SOURCE:-}" && -n "${BASH_SOURCE[0]:-}" ]]; then
+    # 正常从文件执行时可用
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+COMMON_SH="${SCRIPT_DIR:+${SCRIPT_DIR}/common.sh}"
 
 # 如果存在本地 common.sh，则加载它（开发环境）
 if [[ -f "$COMMON_SH" ]]; then
