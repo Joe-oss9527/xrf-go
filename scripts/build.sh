@@ -82,7 +82,7 @@ check_environment() {
 
 # 运行测试
 run_tests() {
-    if [[ "${SKIP_TESTS}" == "true" ]]; then
+    if [[ "${SKIP_TESTS:-false}" == "true" ]]; then
         warning "跳过测试"
         return
     fi
