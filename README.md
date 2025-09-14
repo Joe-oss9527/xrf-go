@@ -72,6 +72,7 @@ xrf add vr --port 443
 xrf add vr --port 443 --dest www.microsoft.com
 # 示例（错误，容易导致目标变成 www.microsoft.com:443:443）:
 # xrf add vr --port 443 --dest www.microsoft.com:443
+# 如果不指定 --dest，将默认使用 www.microsoft.com
 
 # 添加 VLESS-Encryption（后量子加密）
 xrf add ve --port 443 --auth mlkem768

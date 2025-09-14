@@ -356,9 +356,9 @@ func createAddCommand() *cobra.Command {
   • hu        - VLESS-HTTPUpgrade
 
 示例:
-  xrf add vr                                    # 添加 VLESS-REALITY (零配置)
+  xrf add vr                                    # 添加 VLESS-REALITY (零配置，dest 默认 www.microsoft.com)
   xrf add vr --port 8443                        # 自定义端口
-  xrf add vr --dest www.microsoft.com:443       # 自定义目标地址
+  xrf add vr --dest www.microsoft.com           # 自定义目标域名（无需 :443）
   xrf add ve --port 443 --auth mlkem768 --mode native --server-rtt 600s --client-rtt 0rtt \
            --flow xtls-rprx-vision --padding "100-111-1111.75-0-111.50-0-3333"  # 添加 VLESS-Encryption
   xrf add vmess --port 80 --path /ws            # 添加 VMess-WebSocket
@@ -460,7 +460,7 @@ func createAddCommand() *cobra.Command {
 
 	cmd.Flags().IntVar(&port, "port", 0, "端口")
 	cmd.Flags().StringVar(&domain, "domain", "", "域名 (仅TLS协议需要)")
-	cmd.Flags().StringVar(&dest, "dest", "", "REALITY目标地址 (如: www.microsoft.com:443)")
+    cmd.Flags().StringVar(&dest, "dest", "", "REALITY 目标域名（默认 www.microsoft.com；不要附加 :443）")
 	cmd.Flags().StringVar(&path, "path", "", "路径")
 	cmd.Flags().StringVar(&password, "password", "", "密码")
 	cmd.Flags().StringVar(&uuid, "uuid", "", "UUID")
