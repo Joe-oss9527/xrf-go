@@ -12,10 +12,12 @@ fi
 
 if ! command -v golangci-lint >/dev/null 2>&1; then
   echo "[dev-verify] golangci-lint not found; attempting to install to ./.bin via 'go install'..."
-  export GOBIN="$(pwd)/.bin"
+  GOBIN="$(pwd)/.bin"
+  export GOBIN
   mkdir -p "$GOBIN"
   go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-  export PATH="$GOBIN:$PATH"
+  PATH="$GOBIN:$PATH"
+  export PATH
 fi
 
 echo "[dev-verify] gofmt -s -w ."
@@ -44,4 +46,3 @@ echo "[dev-verify] go test (short) with validation skipped"
 XRF_SKIP_VALIDATION=1 CGO_ENABLED=0 go test -v -race -short ./...
 
 echo "[dev-verify] All checks passed."
-

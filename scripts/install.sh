@@ -11,6 +11,7 @@ COMMON_SH="${SCRIPT_DIR}/common.sh"
 
 # 如果存在本地 common.sh，则加载它（开发环境）
 if [[ -f "$COMMON_SH" ]]; then
+    # shellcheck source=./common.sh
     source "$COMMON_SH"
     # 统一本脚本的日志接口
     info() { log_info "$1"; }
@@ -181,7 +182,7 @@ check_dependencies() {
     
     local deps=("curl" "unzip" "tar" "systemctl")
     for dep in "${deps[@]}"; do
-        if ! command -v $dep &> /dev/null; then
+        if ! command -v "$dep" &> /dev/null; then
             error "缺少依赖: $dep，请先安装"
         fi
     done
@@ -198,16 +199,20 @@ select_asset_url() {
     local name_regex="$2"
 
     # 展平 JSON 并定位 assets 数组
-    local flat=$(echo "$release_json" | tr -d '\n')
-    local assets=$(echo "$flat" | sed -n 's/.*"assets":[[]\(.*\)[]].*/\1/p')
+    local flat
+    flat=$(echo "$release_json" | tr -d '\n')
+    local assets
+    assets=$(echo "$flat" | sed -n 's/.*"assets":[[]\(.*\)[]].*/\1/p')
     if [[ -z "$assets" ]]; then
         echo ""; return 1
     fi
 
     # 按资产对象切分后逐一匹配名称并取其下载链接
     echo "$assets" | sed 's/},[[:space:]]*{/\n/g' | while IFS= read -r block; do
-        local name=$(echo "$block" | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
-        local url=$(echo "$block" | sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        local name
+        name=$(echo "$block" | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        local url
+        url=$(echo "$block" | sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
         if [[ -n "$name" && -n "$url" ]]; then
             if echo "$name" | grep -Eiq "$name_regex"; then
                 echo "$url"
