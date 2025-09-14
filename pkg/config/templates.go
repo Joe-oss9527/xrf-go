@@ -370,23 +370,23 @@ const TailRoutingTemplate = `{
 
 // 模板数据结构
 type TemplateData struct {
-    Tag        string
-    Port       int
-    UUID       string
-    Password   string
-    Method     string
-    Path       string
-    Host       string
-    Security   string
-    CertFile   string
-    KeyFile    string
-    Dest       string
-    ServerName string
-    PrivateKey string
-    ShortId    string
-    // VLESS Encryption specific
-    Decryption string
-    Flow       string
+	Tag        string
+	Port       int
+	UUID       string
+	Password   string
+	Method     string
+	Path       string
+	Host       string
+	Security   string
+	CertFile   string
+	KeyFile    string
+	Dest       string
+	ServerName string
+	PrivateKey string
+	ShortId    string
+	// VLESS Encryption specific
+	Decryption string
+	Flow       string
 }
 
 // 模板渲染器
@@ -412,16 +412,16 @@ func (t *TemplateRenderer) Render(templateStr string, data TemplateData) (string
 
 // 获取模板映射
 func GetTemplateMap() map[string]string {
-    return map[string]string{
-        "base":              BaseConfigTemplate,
-        "dns":               DNSConfigTemplate,
-        "vless-reality":     VLESSRealityInboundTemplate,
-        "vless-encryption":  VLESSEncryptionInboundTemplate,
-        "vless-ws":          VLESSWSInboundTemplate,
-        "vmess-ws":          VMessWSInboundTemplate,
-        "vless-httpupgrade": VLESSHTTPUpgradeInboundTemplate,
-        "trojan-ws":         TrojanWSInboundTemplate,
-        "shadowsocks":       ShadowsocksInboundTemplate,
+	return map[string]string{
+		"base":              BaseConfigTemplate,
+		"dns":               DNSConfigTemplate,
+		"vless-reality":     VLESSRealityInboundTemplate,
+		"vless-encryption":  VLESSEncryptionInboundTemplate,
+		"vless-ws":          VLESSWSInboundTemplate,
+		"vmess-ws":          VMessWSInboundTemplate,
+		"vless-httpupgrade": VLESSHTTPUpgradeInboundTemplate,
+		"trojan-ws":         TrojanWSInboundTemplate,
+		"shadowsocks":       ShadowsocksInboundTemplate,
 		"shadowsocks-2022":  Shadowsocks2022InboundTemplate,
 		"direct-outbound":   DirectOutboundTemplate,
 		"block-outbound":    BlockOutboundTemplate,

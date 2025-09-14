@@ -50,10 +50,25 @@ XRF-Go is a production-ready Xray installation and configuration tool with 100% 
 - TLS module tests: `go test -cover ./pkg/tls/`
 - Configuration validation: `xray test -confdir /etc/xray/confs`
 
-### Code Quality
+### Code Quality (Run Before Every Commit)
 - Format: `go fmt ./...`
+- Vet: `go vet ./...`
 - Lint: `golangci-lint run`
+- Unit Tests: `go test ./...`
 - Security: `go mod audit`
+
+### Git and GitHub Workflow (PRIORITY: Use gh CLI)
+- **GitHub Operations**: ALWAYS use `gh` CLI for pull requests, issues, releases
+- **Pre-Commit Checklist**: Run in exact order before ANY commit:
+  ```bash
+  go fmt ./...           # Format code
+  go vet ./...          # Static analysis
+  golangci-lint run     # Advanced linting
+  go test ./...         # Run unit tests
+  ```
+- **Pull Requests**: `gh pr create`, `gh pr list`, `gh pr merge`
+- **Issues**: `gh issue create`, `gh issue list`, `gh issue close`
+- All quality checks must pass with 0 errors/warnings before proceeding
 
 ## Protocol Implementation Rules
 
@@ -71,6 +86,13 @@ XRF-Go is a production-ready Xray installation and configuration tool with 100% 
 - Use Go string constants only
 - Include performance optimizations: `tcpKeepAliveIdle: 300`, `tcpUserTimeout: 10000`
 - Apply BBR congestion control settings automatically
+
+### REALITY Protocol Parameter Rules (CRITICAL - DO NOT CONFUSE)
+- **`dest`** = 目标地址 (如: www.microsoft.com:443) - NEVER rename to `sni`
+- **`serverNames`** = SNI服务器名列表 (如: ["www.microsoft.com"]) - 服务端使用数组
+- **`serverName`** = 单个SNI服务器名 (如: "www.microsoft.com") - 客户端使用字符串
+- **CLI参数**: `--dest` 用于指定目标地址，不是SNI参数
+- **配置结构**: `dest`和`serverNames`是两个独立功能的参数，都必须正确配置
 
 ## CLI Command Implementation
 
@@ -214,8 +236,12 @@ if err := validateConfigAfterChange(); err != nil {
 - Documentation updates
 
 ### Code Quality Compliance (Enforce Before Commit)
-- **Lint Check**: `golangci-lint run` must pass with 0 issues
-- **Format Check**: `go fmt ./...` must not modify any files
+- **Pre-Commit Pipeline**: Execute commands in exact order:
+  1. `go fmt ./...` (must not modify any files)
+  2. `go vet ./...` (must pass with 0 warnings)
+  3. `golangci-lint run` (must pass with 0 issues)
+  4. `go test ./...` (must pass all tests)
+- **GitHub Operations**: Use `gh` CLI for all GitHub tasks (issues, PRs, releases)
 - **Error Handling**: All error return values must be checked (errcheck)
 - **Test Standards**: Follow Go testing best practices:
   - Use `t.Fatal()` for setup failures that prevent test execution

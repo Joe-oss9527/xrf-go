@@ -30,26 +30,26 @@ type ProtocolInfo struct {
 
 // 定义所有支持的协议
 var SupportedProtocols = []Protocol{
-    {
-        Name:                "VLESS-REALITY",
-        Aliases:             []string{"vr", "vless", "reality"},
-        DefaultPort:         443,
-        RequiresTLS:         false,
-        RequiresDomain:      false,
-        SupportedTransports: []string{"tcp"},
-        Template:            "vless-reality",
-        Description:         "VLESS with REALITY transport (recommended, zero-config)",
-    },
-    {
-        Name:                "VLESS-Encryption",
-        Aliases:             []string{"ve", "vless-enc", "vless-pqe"},
-        DefaultPort:         443,
-        RequiresTLS:         false,
-        RequiresDomain:      false,
-        SupportedTransports: []string{"tcp"},
-        Template:            "vless-encryption",
-        Description:         "VLESS Post-Quantum Encryption (server decryption/client encryption)",
-    },
+	{
+		Name:                "VLESS-REALITY",
+		Aliases:             []string{"vr", "vless", "reality"},
+		DefaultPort:         443,
+		RequiresTLS:         false,
+		RequiresDomain:      false,
+		SupportedTransports: []string{"tcp"},
+		Template:            "vless-reality",
+		Description:         "VLESS with REALITY transport (recommended, zero-config)",
+	},
+	{
+		Name:                "VLESS-Encryption",
+		Aliases:             []string{"ve", "vless-enc", "vless-pqe"},
+		DefaultPort:         443,
+		RequiresTLS:         false,
+		RequiresDomain:      false,
+		SupportedTransports: []string{"tcp"},
+		Template:            "vless-encryption",
+		Description:         "VLESS Post-Quantum Encryption (server decryption/client encryption)",
+	},
 	{
 		Name:                "VLESS-WebSocket-TLS",
 		Aliases:             []string{"vw", "vless-ws"},

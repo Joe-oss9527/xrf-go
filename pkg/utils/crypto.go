@@ -8,13 +8,13 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
-    "encoding/pem"
-    "fmt"
-    "os/exec"
-    "strings"
+	"encoding/pem"
+	"fmt"
+	"os/exec"
+	"strings"
 
 	"github.com/google/uuid"
-    "golang.org/x/crypto/curve25519"
+	"golang.org/x/crypto/curve25519"
 )
 
 func GenerateUUID() string {
@@ -70,26 +70,26 @@ func GenerateX25519KeyPair() (privateKey, publicKey string, err error) {
 	privateKey = base64.RawURLEncoding.EncodeToString(priv[:])
 	publicKey = base64.RawURLEncoding.EncodeToString(pub[:])
 
-    return privateKey, publicKey, nil
+	return privateKey, publicKey, nil
 }
 
 // DeriveX25519Public 从 base64.RawURLEncoding 编码的私钥派生公钥（同 Xray 算法）
 func DeriveX25519Public(privateKeyB64 string) (string, error) {
-    privBytes, err := base64.RawURLEncoding.DecodeString(privateKeyB64)
-    if err != nil {
-        return "", err
-    }
-    if len(privBytes) != 32 {
-        return "", fmt.Errorf("invalid X25519 private key length: %d", len(privBytes))
-    }
-    var priv, pub [32]byte
-    copy(priv[:], privBytes)
-    // Clamp
-    priv[0] &= 248
-    priv[31] &= 127
-    priv[31] |= 64
-    curve25519.ScalarBaseMult(&pub, &priv)
-    return base64.RawURLEncoding.EncodeToString(pub[:]), nil
+	privBytes, err := base64.RawURLEncoding.DecodeString(privateKeyB64)
+	if err != nil {
+		return "", err
+	}
+	if len(privBytes) != 32 {
+		return "", fmt.Errorf("invalid X25519 private key length: %d", len(privBytes))
+	}
+	var priv, pub [32]byte
+	copy(priv[:], privBytes)
+	// Clamp
+	priv[0] &= 248
+	priv[31] &= 127
+	priv[31] |= 64
+	curve25519.ScalarBaseMult(&pub, &priv)
+	return base64.RawURLEncoding.EncodeToString(pub[:]), nil
 }
 
 func GenerateShortID(length int) string {

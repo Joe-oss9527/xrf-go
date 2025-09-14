@@ -746,9 +746,9 @@ func extractTarGz(srcPath, dstDir string) error {
 
 // 生成模板数据
 func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, options map[string]interface{}) (TemplateData, error) {
-    data := TemplateData{
-        Tag: tag,
-    }
+	data := TemplateData{
+		Tag: tag,
+	}
 
 	// 设置端口（包含端口冲突检查）
 	if port, exists := options["port"]; exists {
@@ -891,28 +891,28 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 		}
 	}
 
-    // VLESS-Encryption 特定设置（后量子加密）
-    if strings.EqualFold(protocol.Name, "VLESS-Encryption") {
-        if flow, exists := options["flow"]; exists {
-            if flowStr, ok := flow.(string); ok {
-                data.Flow = flowStr
-            }
-        } else {
-            data.Flow = "xtls-rprx-vision"
-        }
-        if dec, exists := options["decryption"]; exists {
-            if decStr, ok := dec.(string); ok {
-                data.Decryption = decStr
-            }
-        }
-        if data.Decryption == "" {
-            return data, fmt.Errorf("VLESS-Encryption 需要提供 decryption 配置（使用 'xray vlessenc' 生成）")
-        }
-    }
+	// VLESS-Encryption 特定设置（后量子加密）
+	if strings.EqualFold(protocol.Name, "VLESS-Encryption") {
+		if flow, exists := options["flow"]; exists {
+			if flowStr, ok := flow.(string); ok {
+				data.Flow = flowStr
+			}
+		} else {
+			data.Flow = "xtls-rprx-vision"
+		}
+		if dec, exists := options["decryption"]; exists {
+			if decStr, ok := dec.(string); ok {
+				data.Decryption = decStr
+			}
+		}
+		if data.Decryption == "" {
+			return data, fmt.Errorf("VLESS-Encryption 需要提供 decryption 配置（使用 'xray vlessenc' 生成）")
+		}
+	}
 
-    // TLS 设置
-    if protocol.RequiresTLS {
-        data.Security = "tls"
+	// TLS 设置
+	if protocol.RequiresTLS {
+		data.Security = "tls"
 
 		// 测试环境证书处理
 		if IsTestEnvironment() {
@@ -956,7 +956,7 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 		}
 	}
 
-    return data, nil
+	return data, nil
 }
 
 // 生成配置文件名
