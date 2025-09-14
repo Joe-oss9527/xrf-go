@@ -340,6 +340,7 @@ func createUninstallCommand() *cobra.Command {
 		removeConfigs bool
 		removeLogs    bool
 		assumeYes     bool
+		keepBinary    bool
 	)
 
 	cmd := &cobra.Command{
@@ -411,7 +412,7 @@ func createUninstallCommand() *cobra.Command {
 			}
 
 			// 5) 完全卸载时，尝试移除 XRF 自身（常见安装路径）
-			if full {
+			if full && !keepBinary {
 				paths := []string{"/usr/local/bin/xrf", "/usr/bin/xrf"}
 				exePath, _ := os.Executable()
 				for _, p := range paths {
@@ -427,6 +428,8 @@ func createUninstallCommand() *cobra.Command {
 						}
 					}
 				}
+			} else if full && keepBinary {
+				utils.PrintInfo("已按要求保留 XRF 可执行文件（--keep-binary）")
 			}
 
 			utils.PrintSuccess("Xray 卸载完成")
@@ -442,6 +445,7 @@ func createUninstallCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&removeConfigs, "remove-configs", false, "删除 /etc/xray 配置目录（会先尝试备份）")
 	cmd.Flags().BoolVar(&removeLogs, "remove-logs", false, "删除日志（/var/log/xray*）")
 	cmd.Flags().BoolVar(&assumeYes, "yes", false, "跳过交互确认，直接卸载")
+	cmd.Flags().BoolVar(&keepBinary, "keep-binary", false, "完全卸载时保留 xrf 可执行文件")
 
 	return cmd
 }

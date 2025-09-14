@@ -192,6 +192,9 @@ xrf uninstall
 # 完全卸载（移除服务/用户、二进制、配置、日志，且尝试移除 xrf 可执行文件），非交互
 xrf uninstall --full --yes
 
+# 完全卸载但保留 xrf 可执行文件
+xrf uninstall --full --keep-binary --yes
+
 # 自定义：仅移除服务用户与用户组
 xrf uninstall --purge-user --yes
 
@@ -205,7 +208,7 @@ xrf uninstall --remove-logs --yes
 说明：
 - 默认操作会提示确认；在脚本/CI 环境可使用 `--yes` 跳过交互。
 - 完全卸载会将 `/etc/xray` 目录打包备份到 `/tmp/xrf-uninstall-backup-YYYYMMDD-HHMMSS.tar.gz` 后再删除。
-- 完全卸载会尝试移除本工具（`/usr/local/bin/xrf` 或 `/usr/bin/xrf`）；如安装路径非常规或权限不足，可手动删除。
+- 完全卸载会尝试移除本工具（`/usr/local/bin/xrf` 或 `/usr/bin/xrf`）；如需保留请使用 `--keep-binary`，若安装路径非常规或权限不足，可手动删除。
 
 ## 🏗️ 架构设计
 
