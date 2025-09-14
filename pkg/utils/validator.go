@@ -85,8 +85,8 @@ func SuggestPort(protocolType string, preferredPort int) (int, error) {
 	// 根据协议类型建议默认端口范围
 	var startPort, endPort int
 
-	switch protocolType {
-	case "vless-reality", "vr", "VLESS-REALITY":
+    switch protocolType {
+    case "vless-reality", "vr", "VLESS-REALITY":
 		// REALITY 推荐使用 443 或 80
 		if IsPortAvailable(443) {
 			return 443, nil
@@ -123,9 +123,11 @@ func SuggestPort(protocolType string, preferredPort int) (int, error) {
 
 // GetPortsByProtocol 根据协议获取推荐端口列表
 func GetPortsByProtocol(protocolType string) []int {
-	switch protocolType {
-	case "vless-reality", "vr", "VLESS-REALITY":
-		return []int{443, 80, 8443, 2053, 2083, 2087, 2096}
+    switch protocolType {
+    case "vless-reality", "vr", "VLESS-REALITY":
+        return []int{443, 80, 8443, 2053, 2083, 2087, 2096}
+    case "vless-encryption", "ve", "VLESS-Encryption":
+        return []int{443, 80, 8443, 2053, 2083, 2087, 2096}
 	case "vmess", "vless-ws", "trojan-ws", "mw", "vw", "tw", "vless-hu", "hu", "VMess-WebSocket-TLS", "VLESS-WebSocket-TLS", "Trojan-WebSocket-TLS", "VLESS-HTTPUpgrade":
 		return []int{80, 443, 8080, 8443, 2052, 2053, 2082, 2083, 2086, 2087, 2095, 2096}
 	case "shadowsocks", "ss", "ss2022", "Shadowsocks", "Shadowsocks-2022":
@@ -331,3 +333,12 @@ func IsValidUUID(uuid string) bool {
 	uuidRegex := regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[4][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 	return uuidRegex.MatchString(uuid)
 }
+    case "vless-encryption", "ve", "VLESS-Encryption":
+        // 与 REALITY 类似，默认尝试 443/80
+        if IsPortAvailable(443) {
+            return 443, nil
+        }
+        if IsPortAvailable(80) {
+            return 80, nil
+        }
+        startPort, endPort = 40000, 50000

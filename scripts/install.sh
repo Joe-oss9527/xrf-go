@@ -97,43 +97,85 @@ check_dependencies() {
     success "系统依赖检查通过"
 }
 
+# 从 GitHub Release JSON 中按名称正则选择资产下载地址
+# 参数: $1=release_json $2=name_regex (grep -E 风格)
+select_asset_url() {
+    local release_json="$1"
+    local name_regex="$2"
+
+    # 展平 JSON 并定位 assets 数组
+    local flat=$(echo "$release_json" | tr -d '\n')
+    local assets=$(echo "$flat" | sed -n 's/.*"assets":[[]\(.*\)[]].*/\1/p')
+    if [[ -z "$assets" ]]; then
+        echo ""; return 1
+    fi
+
+    # 按资产对象切分后逐一匹配名称并取其下载链接
+    echo "$assets" | sed 's/},[[:space:]]*{/\n/g' | while IFS= read -r block; do
+        local name=$(echo "$block" | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        local url=$(echo "$block" | sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        if [[ -n "$name" && -n "$url" ]]; then
+            if echo "$name" | grep -Eiq "$name_regex"; then
+                echo "$url"
+                break
+            fi
+        fi
+    done
+}
+
 # 下载并安装 Xray
 install_xray() {
     info "正在安装 Xray..."
     
-    # 动态获取最新版本
-    info "获取 Xray 最新版本..."
-    local xray_version=$(curl -fsSL "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | grep '"tag_name":' | cut -d'"' -f4)
-    
-    if [[ -z "$xray_version" ]]; then
-        warning "无法获取最新版本，使用默认版本 v25.8.31"
-        xray_version="v25.8.31"
-    fi
-    
-    local base_url="https://github.com/XTLS/Xray-core/releases/download/${xray_version}"
-    local temp_dir=$(mktemp -d)
-    
-    # 根据架构尝试多个可能的资产文件名以避免404
-    local candidates=()
-    if [[ "$ARCH" == "amd64" ]]; then
-        candidates+=("Xray-linux-64.zip" "Xray-linux-amd64.zip")
-    else
-        candidates+=("Xray-linux-arm64-v8a.zip" "Xray-linux-arm64.zip")
-    fi
-    
-    info "下载 Xray ${xray_version} for ${ARCH}..."
-    local downloaded=""
-    for fname in "${candidates[@]}"; do
-        local url="${base_url}/${fname}"
-        if curl -fsSL -o "${temp_dir}/xray.zip" "$url"; then
-            downloaded="$fname"
-            break
+    # 版本选择策略：
+    # 1) 若设置了 XRAY_VERSION，则优先使用（可为具体 tag，如 v26.0.0；或设置为 latest）
+    # 2) 否则尝试通过 GitHub API 获取最新版本
+    # 3) 若仍失败，则直接报错并退出（不做静默回退）
+
+    local xray_version="${XRAY_VERSION:-}"
+    if [[ -z "${xray_version}" || "${xray_version}" == "latest" ]]; then
+        info "获取 Xray 最新版本..."
+        local curl_opts=( -fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: xrf-go-installer" )
+        if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+            curl_opts+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" )
         fi
-    done
-    
-    if [[ -z "$downloaded" ]]; then
-        error "下载 Xray 失败，请检查网络连接或稍后重试"
+        xray_version=$(curl "${curl_opts[@]}" "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | grep '"tag_name":' | cut -d'"' -f4 || true)
+        if [[ -z "$xray_version" ]]; then
+            error "无法获取 Xray 最新版本。请检查网络或：\n  - 设置 GITHUB_TOKEN 以避免 GitHub API 限流\n  - 或显式指定版本：XRAY_VERSION=v26.x.y bash install.sh"
+        fi
+    else
+        info "使用指定的 Xray 版本: ${xray_version}"
     fi
+    
+    local temp_dir=$(mktemp -d)
+
+    # 通过 GitHub API 获取指定 tag 的 release（包含 assets）
+    local curl_opts=( -fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: xrf-go-installer" )
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        curl_opts+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" )
+    fi
+    local release_api="https://api.github.com/repos/XTLS/Xray-core/releases/tags/${xray_version}"
+    local release_json=$(curl "${curl_opts[@]}" "$release_api" || true)
+    if [[ -z "$release_json" ]]; then
+        error "获取 Xray Release 资产失败：${release_api}\n建议：\n  • 检查网络连通性或稍后重试\n  • 设置 GITHUB_TOKEN 以避免 GitHub API 限流\n  • 手动查看发布页确认资产是否存在：https://github.com/XTLS/Xray-core/releases/tag/${xray_version}\n  • 或显式指定版本：XRAY_VERSION=v26.x.y bash install.sh"
+    fi
+
+    # 动态选择与架构匹配的资产
+    local name_regex=""
+    if [[ "$ARCH" == "amd64" ]]; then
+        name_regex='^Xray-.*linux.*(64|amd64).*\.zip$'
+    else
+        name_regex='^Xray-.*linux.*(arm64|arm64-v8a).*\.zip$'
+    fi
+
+    local download_url=$(select_asset_url "$release_json" "$name_regex")
+    if [[ -z "$download_url" ]]; then
+        error "未找到匹配架构(${ARCH})的 Xray 资产。\n已使用匹配规则: ${name_regex}\n发布页：https://github.com/XTLS/Xray-core/releases/tag/${xray_version}\n请在发布页确认是否存在相应资产，或设置 XRAY_VERSION 指定其他版本。"
+    fi
+
+    local fname=$(basename "$download_url")
+    info "下载 Xray ${xray_version} (${fname}) for ${ARCH}..."
+    curl -fsSL -o "${temp_dir}/xray.zip" "$download_url" || error "下载 Xray 失败：${download_url}\n建议：\n  • 检查网络连通性/代理设置\n  • 稍后重试或手动从发布页下载：https://github.com/XTLS/Xray-core/releases/tag/${xray_version}"
     
     cd "$temp_dir"
     unzip -q xray.zip
@@ -151,74 +193,47 @@ install_xray() {
 install_xrf_go() {
     info "正在安装 XRF-Go..."
     
-    # 获取最新 Release 版本并从 GitHub Releases 下载预编译的二进制文件
-    local xrf_version=$(curl -fsSL "https://api.github.com/repos/Joe-oss9527/xrf-go/releases/latest" | grep '"tag_name":' | cut -d'"' -f4)
+    # 获取最新 Release JSON
+    local curl_opts=( -fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: xrf-go-installer" )
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        curl_opts+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" )
+    fi
+    local xrf_json=$(curl "${curl_opts[@]}" "https://api.github.com/repos/Joe-oss9527/xrf-go/releases/latest" || true)
+    if [[ -z "$xrf_json" ]]; then
+        error "无法获取 XRF-Go 最新版本信息（API 访问失败）。\n建议：\n  • 检查网络连通性或稍后重试\n  • 设置 GITHUB_TOKEN 以避免 GitHub API 限流\n  • 手动查看发布页：https://github.com/Joe-oss9527/xrf-go/releases/latest"
+    fi
+    local xrf_version=$(echo "$xrf_json" | grep '"tag_name":' | cut -d '"' -f4)
     if [[ -z "$xrf_version" ]]; then
-        warning "无法获取 XRF-Go 最新版本，使用默认版本 v1.0.0"
-        xrf_version="v1.0.0"
+        error "无法解析 XRF-Go 最新版本（tag_name 缺失）。\n发布页：https://github.com/Joe-oss9527/xrf-go/releases/latest"
     fi
-    
-    local base_url="https://github.com/Joe-oss9527/xrf-go/releases/download/${xrf_version}"
+
     local temp_dir=$(mktemp -d)
-    local downloaded=""
-    
-    # 优先下载 tar.gz 归档，其次尝试裸二进制
     info "下载 XRF-Go ${xrf_version} for ${ARCH}..."
-    for fname in "xrf-linux-${ARCH}.tar.gz" "xrf-linux-${ARCH}"; do
-        local url="${base_url}/${fname}"
-        if curl -fsSL -o "${temp_dir}/${fname}" "$url" 2>/dev/null; then
-            downloaded="$fname"
-            break
-        fi
-    done
-    
-    if [[ -z "$downloaded" ]]; then
-        warning "预编译版本不可用，将从源码编译..."
+
+    # 解析资产并选择与架构匹配的 tar.gz
+    local name_regex="^xrf-.*linux-${ARCH}.*\.(tar\.gz|tgz)$"
+    local xrf_url=$(select_asset_url "$xrf_json" "$name_regex")
+    if [[ -z "$xrf_url" ]]; then
         rm -rf "$temp_dir"
-        compile_from_source
-        return
+        error "未找到与架构(${ARCH})匹配的 XRF-Go 预编译归档。\n匹配规则: ${name_regex}\n发布页：https://github.com/Joe-oss9527/xrf-go/releases/tag/${xrf_version}\n请在发布页确认是否存在相应产物。"
     fi
+
+    local downloaded=$(basename "$xrf_url")
+    curl -fsSL -o "${temp_dir}/${downloaded}" "$xrf_url" || {
+        rm -rf "$temp_dir"
+        error "下载 XRF-Go 预编译归档失败：${xrf_url}\n建议：\n  • 检查网络连通性/代理设置\n  • 稍后重试或手动从发布页下载：https://github.com/Joe-oss9527/xrf-go/releases/tag/${xrf_version}"
+    }
     
     # 解压或直接安装
-    if [[ "$downloaded" == *.tar.gz ]]; then
-        tar -xzf "${temp_dir}/${downloaded}" -C "$temp_dir"
-        # 解包后文件名为 xrf-linux-${ARCH}
-        $SUDO_CMD install -m 755 "${temp_dir}/xrf-linux-${ARCH}" /usr/local/bin/xrf
-    else
-        $SUDO_CMD install -m 755 "${temp_dir}/${downloaded}" /usr/local/bin/xrf
-    fi
+    # 解压并安装
+    tar -xzf "${temp_dir}/${downloaded}" -C "$temp_dir"
+    $SUDO_CMD install -m 755 "${temp_dir}/xrf-linux-${ARCH}" /usr/local/bin/xrf
     
     rm -rf "$temp_dir"
     success "XRF-Go 安装完成: $(xrf version | grep 'XRF-Go 版本')"
 }
 
-# 从源码编译（备用方案）
-compile_from_source() {
-    info "从源码编译 XRF-Go..."
-    
-    # 检查 Go 环境
-    if ! command -v go &> /dev/null; then
-        error "需要 Go 1.23+ 环境来编译 XRF-Go"
-    fi
-    
-    local go_version=$(go version | grep -o 'go[0-9.]*' | head -1)
-    info "检测到 Go 版本: $go_version"
-    
-    local temp_dir=$(mktemp -d)
-    cd "$temp_dir"
-    
-    info "克隆源码..."
-    git clone https://github.com/Joe-oss9527/xrf-go.git || error "克隆源码失败"
-    
-    cd xrf-go
-    info "编译中..."
-    go build -ldflags="-s -w" -o xrf cmd/xrf/main.go
-    
-    $SUDO_CMD install -m 755 xrf /usr/local/bin/
-    
-    rm -rf "$temp_dir"
-    success "XRF-Go 编译安装完成"
-}
+## 编译回退逻辑已移除：若预编译资产不可用或下载失败，将直接报错退出
 
 # 创建配置目录
 setup_config() {

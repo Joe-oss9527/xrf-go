@@ -174,6 +174,22 @@ func TestX25519KeyPair(t *testing.T) {
 	})
 }
 
+func TestDeriveX25519Public(t *testing.T) {
+    t.Run("Derive from private", func(t *testing.T) {
+        priv, pub, err := GenerateX25519KeyPair()
+        if err != nil {
+            t.Fatalf("GenerateX25519KeyPair failed: %v", err)
+        }
+        derived, err := DeriveX25519Public(priv)
+        if err != nil {
+            t.Fatalf("DeriveX25519Public failed: %v", err)
+        }
+        if derived != pub {
+            t.Errorf("Derived public key mismatch\n got: %s\nwant: %s", derived, pub)
+        }
+    })
+}
+
 // TestShortID 测试REALITY短ID生成
 func TestShortID(t *testing.T) {
 	t.Run("GenerateShortID", func(t *testing.T) {

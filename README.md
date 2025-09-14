@@ -13,6 +13,7 @@ XRF-Go 是一个专为 Xray 设计的现代化配置管理工具，继承 233boy
 
 ### 🛡️ 现代协议支持
 - **VLESS-REALITY** - 最新抗审查技术（推荐）
+- **VLESS-Encryption** - VLESS 后量子加密（服务端解密/客户端加密）
 - **VLESS-WebSocket-TLS** - 经典 WebSocket 传输
 - **VMess-WebSocket-TLS** - 兼容性最佳
 - **VLESS-HTTPUpgrade** - HTTP/2 升级传输
@@ -66,6 +67,7 @@ xrf install --protocol vw --domain example.com # 指定协议和域名
 
 # ➕ 添加协议（支持别名）
 xrf add vr                                    # VLESS-REALITY (零配置推荐)
+xrf add ve                                    # VLESS-Encryption（自动生成 decryption/encryption）
 xrf add vw --port 443 --domain example.com    # VLESS-WebSocket-TLS
 xrf add vmess --port 80 --path /ws            # VMess-WebSocket
 xrf add tw --port 443 --domain example.com    # Trojan-WebSocket-TLS
@@ -91,6 +93,8 @@ xrf generate password                         # 生成随机密码
 xrf generate uuid                             # 生成 UUID
 xrf generate ss2022                           # 生成 SS2022 密钥
 xrf generate keypair                          # 生成 X25519 密钥对
+xrf generate vlessenc                         # 生成 VLESS Encryption decryption/encryption（调用 xray）
+xrf generate mlkem                            # 生成 ML-KEM-768 密钥材料（调用 xray）
 xrf url [tag]                                 # 生成分享链接
 xrf qr [tag]                                  # 显示二维码
 
@@ -105,6 +109,7 @@ xrf restore [backup-file]                    # 恢复配置
 | 别名 | 完整协议名 | 描述 |
 |------|-----------|------|
 | `vr` | VLESS-REALITY | 最新抗审查技术，**零配置强烈推荐** |
+| `ve` | VLESS-Encryption | VLESS 后量子加密（服务端解密/客户端加密） |
 | `vw` | VLESS-WebSocket-TLS | 需要域名和 TLS 证书 |
 | `vmess` | VMess-WebSocket-TLS | 兼容性最好，广泛支持 |
 | `tw` | Trojan-WebSocket-TLS | 高伪装性，需要域名证书 |
@@ -298,3 +303,10 @@ xrf-go/
 Made with ❤️ by XRF-Go Team
 
 </div>
+### VLESS-Encryption 提示
+
+- 使用多配置目录（confdir），参考官方文档: https://xtls.github.io/config/features/multiple.html
+- 服务端使用 settings.decryption，客户端使用 settings.encryption（两者配对）。
+- 不可与 settings.fallbacks 同时使用；建议开启 XTLS（flow: xtls-rprx-vision）以避免二次加解密。
+- 客户端需支持 VLESS Encryption（如：最新 Xray-core、Mihomo ≥ v1.19.13）。
+- 可用命令：`xrf add ve` 自动生成并写入 decryption，同时打印客户端 encryption；或 `xrf generate vlessenc` 手动生成。

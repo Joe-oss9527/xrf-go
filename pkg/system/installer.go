@@ -130,6 +130,32 @@ func (i *Installer) getLatestRelease() (*GitHubRelease, error) {
 	return &release, nil
 }
 
+// getReleaseByTag 获取指定 tag 的发布信息
+func (i *Installer) getReleaseByTag(tag string) (*GitHubRelease, error) {
+    if i.verbose {
+        utils.PrintInfo("获取指定版本信息: %s", tag)
+    }
+
+    url := fmt.Sprintf("https://api.github.com/repos/XTLS/Xray-core/releases/tags/%s", tag)
+    client := &http.Client{Timeout: 30 * time.Second}
+    resp, err := client.Get(url)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+    }
+
+    var release GitHubRelease
+    if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+        return nil, err
+    }
+
+    return &release, nil
+}
+
 // downloadXray 下载 Xray 二进制文件
 func (i *Installer) downloadXray(release *GitHubRelease) error {
 	// 获取适合当前系统的文件名
@@ -478,28 +504,61 @@ func (i *Installer) copyFile(src, dst string) error {
 
 // UpdateXray 更新到指定版本的 Xray
 func (i *Installer) UpdateXray(version string) error {
-	utils.PrintInfo("更新 Xray 到版本: %s", version)
+    utils.PrintInfo("更新 Xray 到版本: %s", version)
 
-	// 备份当前版本
-	backupPath := XrayBinaryPath + ".backup"
-	if i.IsInstalled() {
-		if err := i.copyFile(XrayBinaryPath, backupPath); err != nil {
-			utils.PrintWarning("备份当前版本失败: %v", err)
-		}
-	}
+    // 权限与系统检查与安装保持一致
+    if supported, reason := i.detector.IsSupported(); !supported {
+        return fmt.Errorf("系统不支持: %s", reason)
+    }
+    if !i.detector.IsRoot() {
+        return fmt.Errorf("需要 root 权限才能安装 Xray")
+    }
 
-	// 执行安装 (会覆盖现有文件)
-	if err := i.InstallXray(); err != nil {
-		// 恢复备份
-		if _, statErr := os.Stat(backupPath); statErr == nil {
-			os.Rename(backupPath, XrayBinaryPath)
-		}
-		return fmt.Errorf("更新失败: %w", err)
-	}
+    // 备份当前版本
+    backupPath := XrayBinaryPath + ".backup"
+    if i.IsInstalled() {
+        if err := i.copyFile(XrayBinaryPath, backupPath); err != nil {
+            utils.PrintWarning("备份当前版本失败: %v", err)
+        }
+    }
 
-	// 清理备份文件
-	os.Remove(backupPath)
+    // 获取目标版本 release
+    var (
+        release *GitHubRelease
+        err     error
+    )
+    if version == "" || strings.EqualFold(version, "latest") {
+        release, err = i.getLatestRelease()
+    } else {
+        release, err = i.getReleaseByTag(version)
+    }
+    if err != nil {
+        // 恢复备份
+        if _, statErr := os.Stat(backupPath); statErr == nil {
+            os.Rename(backupPath, XrayBinaryPath)
+        }
+        return fmt.Errorf("获取版本信息失败: %w", err)
+    }
 
-	utils.PrintSuccess("Xray 更新完成!")
-	return nil
+    // 下载并安装指定版本
+    if err := i.downloadXray(release); err != nil {
+        if _, statErr := os.Stat(backupPath); statErr == nil {
+            os.Rename(backupPath, XrayBinaryPath)
+        }
+        return fmt.Errorf("下载 Xray 失败: %w", err)
+    }
+
+    // 确保目录与地理数据文件
+    if err := i.createDirectories(); err != nil {
+        utils.PrintWarning("创建目录失败: %v", err)
+    }
+    if err := i.downloadGeoFiles(); err != nil {
+        utils.PrintWarning("下载地理数据文件失败: %v", err)
+    }
+
+    // 清理备份
+    os.Remove(backupPath)
+
+    utils.PrintSuccess("Xray 更新完成!")
+    return nil
 }

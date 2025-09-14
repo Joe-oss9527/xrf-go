@@ -175,7 +175,7 @@ if err := validateConfigAfterChange(); err != nil {
   2. Integration tests (`*_integration_test.go`) - Full flow with validation, 100-400ms
   3. Main tests (`*_test.go`) - Mixed functional tests, realistic timeouts
 - **Parallel Testing**: All tests use `t.Parallel()` for concurrent execution
-- **Version Consistency**: Always use latest Xray version (currently v25.8.31)
+- **Version Consistency**: Always fetch latest Xray version (no hardcoded fallback)
 - **Environment Variables**: 
   - `config.IsTestEnvironment()` detects go test automatically
   - `XRF_TEST_MODE=1` - Legacy support (deprecated)

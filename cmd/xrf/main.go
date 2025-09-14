@@ -1,23 +1,35 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"os/exec"
-	"strconv"
-	"strings"
+    "encoding/base64"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "os"
+    "os/exec"
+    "regexp"
+    "strconv"
+    "strings"
+    "time"
 
-	"github.com/Joe-oss9527/xrf-go/pkg/config"
-	"github.com/Joe-oss9527/xrf-go/pkg/system"
-	"github.com/Joe-oss9527/xrf-go/pkg/tls"
-	"github.com/Joe-oss9527/xrf-go/pkg/utils"
-	"github.com/spf13/cobra"
+    "github.com/Joe-oss9527/xrf-go/pkg/config"
+    "github.com/Joe-oss9527/xrf-go/pkg/system"
+    "github.com/Joe-oss9527/xrf-go/pkg/tls"
+    "github.com/Joe-oss9527/xrf-go/pkg/utils"
+    "github.com/spf13/cobra"
+)
+
+// These will be set via -ldflags in CI (see .github/workflows/release.yml)
+var (
+    Version   = "v0.0.0-dev"
+    BuildTime = ""
+    GitCommit = ""
 )
 
 var (
-	confDir    string
-	verbose    bool
-	noColor    bool
+    confDir    string
+    verbose    bool
+    noColor    bool
 	configMgr  *config.ConfigManager
 	detector   *system.Detector
 	installer  *system.Installer
@@ -296,24 +308,32 @@ func createInstallCommand() *cobra.Command {
 }
 
 func createAddCommand() *cobra.Command {
-	var (
-		port     int
-		domain   string
-		dest     string
-		path     string
-		password string
-		uuid     string
-		tag      string
-		noReload bool
-	)
+    var (
+        port     int
+        domain   string
+        dest     string
+        path     string
+        password string
+        uuid     string
+        tag      string
+        noReload bool
+        // VLESS-Encryption options
+        veFlow       string
+        veAuth       string
+        veMode       string
+        veServerRTT  string
+        veClientRTT  string
+        vePadding    string
+    )
 
 	cmd := &cobra.Command{
 		Use:   "add [protocol]",
 		Short: "添加协议配置",
-		Long: `添加新的协议配置到 Xray 服务。
+        Long: `添加新的协议配置到 Xray 服务。
 
 支持的协议别名:
   • vr        - VLESS-REALITY
+  • ve        - VLESS-Encryption (后量子加密)
   • vw        - VLESS-WebSocket-TLS
   • vmess/mw  - VMess-WebSocket-TLS
   • tw        - Trojan-WebSocket-TLS
@@ -325,6 +345,8 @@ func createAddCommand() *cobra.Command {
   xrf add vr                                    # 添加 VLESS-REALITY (零配置)
   xrf add vr --port 8443                        # 自定义端口
   xrf add vr --sni www.microsoft.com            # 自定义伪装目标
+  xrf add ve --port 443 --auth mlkem768 --mode native --server-rtt 600s --client-rtt 0rtt \
+           --flow xtls-rprx-vision --padding "100-111-1111.75-0-111.50-0-3333"  # 添加 VLESS-Encryption
   xrf add vmess --port 80 --path /ws            # 添加 VMess-WebSocket
   xrf add ss --method aes-256-gcm               # 添加 Shadowsocks`,
 		Args: cobra.ExactArgs(1),
@@ -365,24 +387,49 @@ func createAddCommand() *cobra.Command {
 				tag = strings.ToLower(strings.ReplaceAll(protocol.Name, "-", "_"))
 			}
 
-			// 添加协议
-			if err := configMgr.AddProtocol(protocolType, tag, options); err != nil {
-				return fmt.Errorf("添加协议失败: %w", err)
-			}
+            // 解析协议元信息
+            protocol, err := config.DefaultProtocolManager.GetProtocol(protocolType)
+            if err != nil {
+                return err
+            }
+
+            // 对 VLESS-Encryption 预先生成 decryption/encryption（可自定义）
+            var clientEncryption string
+            if strings.EqualFold(protocol.Name, "VLESS-Encryption") {
+                utils.PrintInfo("生成 VLESS Encryption 配置对…")
+                if veFlow != "" {
+                    options["flow"] = veFlow
+                }
+                dec, enc, err := composeVLESSENCPair(veAuth, veMode, veServerRTT, veClientRTT, vePadding)
+                if err != nil {
+                    return fmt.Errorf("生成 VLESS Encryption 配置失败: %w", err)
+                }
+                options["decryption"] = dec
+                clientEncryption = enc
+            }
+
+            // 添加协议
+            if err := configMgr.AddProtocol(protocolType, tag, options); err != nil {
+                return fmt.Errorf("添加协议失败: %w", err)
+            }
 
 			utils.PrintSuccess("协议 %s 添加成功，标签: %s", protocolType, tag)
 
-			// 显示配置信息
-			utils.PrintSubSection("配置信息")
-			if port != 0 {
-				utils.PrintKeyValue("端口", strconv.Itoa(port))
-			}
-			if domain != "" {
-				utils.PrintKeyValue("域名", domain)
-			}
-			if path != "" {
-				utils.PrintKeyValue("路径", path)
-			}
+            // 显示配置信息
+            utils.PrintSubSection("配置信息")
+            if port != 0 {
+                utils.PrintKeyValue("端口", strconv.Itoa(port))
+            }
+            if domain != "" {
+                utils.PrintKeyValue("域名", domain)
+            }
+            if path != "" {
+                utils.PrintKeyValue("路径", path)
+            }
+            if clientEncryption != "" {
+                utils.PrintKeyValue("客户端 encryption", clientEncryption)
+                utils.PrintInfo("将上面的 encryption 字符串粘贴到客户端 VLESS outbound 的 settings.encryption")
+            }
 
 			// 自动热重载配置
 			if !noReload {
@@ -401,10 +448,17 @@ func createAddCommand() *cobra.Command {
 	cmd.Flags().StringVar(&domain, "domain", "", "域名 (仅TLS协议需要)")
 	cmd.Flags().StringVar(&dest, "sni", "", "REALITY伪装目标SNI (如: www.microsoft.com)")
 	cmd.Flags().StringVar(&path, "path", "", "路径")
-	cmd.Flags().StringVar(&password, "password", "", "密码")
-	cmd.Flags().StringVar(&uuid, "uuid", "", "UUID")
-	cmd.Flags().StringVar(&tag, "tag", "", "配置标签")
-	cmd.Flags().BoolVar(&noReload, "no-reload", false, "跳过自动热重载")
+    cmd.Flags().StringVar(&password, "password", "", "密码")
+    cmd.Flags().StringVar(&uuid, "uuid", "", "UUID")
+    cmd.Flags().StringVar(&tag, "tag", "", "配置标签")
+    cmd.Flags().BoolVar(&noReload, "no-reload", false, "跳过自动热重载")
+    // VLESS-Encryption flags
+    cmd.Flags().StringVar(&veFlow, "flow", "", "VLESS-Encryption flow（默认 xtls-rprx-vision）")
+    cmd.Flags().StringVar(&veAuth, "auth", "mlkem768", "VLESS-Encryption 认证 (mlkem768|x25519)")
+    cmd.Flags().StringVar(&veMode, "mode", "native", "VLESS-Encryption 模式 (native|xorpub|random)")
+    cmd.Flags().StringVar(&veServerRTT, "server-rtt", "600s", "服务端 1-RTT 时长（如 600s 或 600-900s；或 0rtt）")
+    cmd.Flags().StringVar(&veClientRTT, "client-rtt", "0rtt", "客户端 0-RTT/1-RTT 设置（0rtt 或 如 600s）")
+    cmd.Flags().StringVar(&vePadding, "padding", "", "1-RTT padding 规则（以 . 分隔多段，如 100-111-1111.75-0-111.50-0-3333）")
 
 	return cmd
 }
@@ -509,14 +563,107 @@ func createInfoCommand() *cobra.Command {
 			// 添加配置文件信息到 settings
 			info.Settings["config_file"] = info.ConfigFile
 
-			// 显示详细信息
-			utils.PrintDetailedProtocolInfo(info.Type, info.Tag, info.Type, info.Port, info.Settings)
+            // 显示详细信息
+            utils.PrintDetailedProtocolInfo(info.Type, info.Tag, info.Type, info.Port, info.Settings)
+
+            // 对 VLESS-Encryption（或含 decryption 的 VLESS 入站）显示客户端 encryption 与提示
+            if encHint := maybePrintVEEncryptionHint(info.Settings); encHint != "" {
+                _ = encHint
+            }
 
 			return nil
 		},
 	}
 
 	return cmd
+}
+
+// maybePrintVEEncryptionHint 如果当前入站为 VLESS 且 settings.decryption!=none，则派生并打印 encryption
+func maybePrintVEEncryptionHint(inbound map[string]interface{}) string {
+    // inbound is the inbounds[0] map
+    // Find settings.decryption
+    settingsVal, ok := inbound["settings"].(map[string]interface{})
+    if !ok {
+        return ""
+    }
+    decVal, ok := settingsVal["decryption"].(string)
+    if !ok || decVal == "" || decVal == "none" {
+        return ""
+    }
+    enc, err := deriveVEEncryption(decVal)
+    if err != nil {
+        utils.PrintWarning("无法派生 VLESS Encryption 客户端参数: %v", err)
+        return ""
+    }
+    utils.PrintSubSection("VLESS Encryption 客户端参数")
+    utils.PrintKeyValue("encryption", enc)
+    utils.PrintInfo("将上述 encryption 填入客户端 VLESS outbound 的 settings.encryption；客户端 RTT 建议使用 0rtt")
+    // 补充参考文档与注意事项
+    utils.PrintSubSection("参考文档与注意事项")
+    utils.PrintInfo("• 多配置目录: https://xtls.github.io/config/features/multiple.html")
+    utils.PrintInfo("• PR 说明: https://github.com/XTLS/Xray-core/pull/5067")
+    utils.PrintInfo("• 不可与 settings.fallbacks 同时使用；建议开启 XTLS 以避免二次加解密")
+    utils.PrintInfo("• 客户端需支持 VLESS Encryption（如: 最新 Xray-core、Mihomo ≥ v1.19.13）")
+    return enc
+}
+
+// deriveVEEncryption 根据服务端 decryption 计算客户端 encryption（优先 0rtt）
+func deriveVEEncryption(decryption string) (string, error) {
+    parts := strings.Split(decryption, ".")
+    if len(parts) < 4 {
+        return "", fmt.Errorf("无效的 decryption 格式")
+    }
+    prefix, mode := parts[0], parts[1]
+    // split padding and key from remaining parts
+    rest := parts[3:]
+    if len(rest) == 0 {
+        return "", fmt.Errorf("decryption 缺少密钥段")
+    }
+    // Identify last base64-looking segment as key
+    key := rest[len(rest)-1]
+    // Determine auth by key length after base64 decode
+    // Try base64url decode
+    var keyBytes []byte
+    if kb, err := base64.RawURLEncoding.DecodeString(key); err == nil {
+        keyBytes = kb
+    } else {
+        return "", fmt.Errorf("无法解析密钥: %v", err)
+    }
+    var clientKey string
+    switch len(keyBytes) {
+    case 32: // X25519 private -> derive public
+        pub, err := utils.DeriveX25519Public(key)
+        if err != nil {
+            return "", err
+        }
+        clientKey = pub
+    case 64: // ML-KEM-768 seed -> derive client via xray
+        ck, err := deriveMLKEMClientFromSeed(key)
+        if err != nil {
+            return "", err
+        }
+        clientKey = ck
+    default:
+        return "", fmt.Errorf("不支持的密钥长度: %d", len(keyBytes))
+    }
+    // Prefer 0rtt on client
+    clientRTT := "0rtt"
+    enc := buildVEDot(prefix, mode, clientRTT, "", clientKey)
+    return enc, nil
+}
+
+func deriveMLKEMClientFromSeed(seed string) (string, error) {
+    // xray mlkem768 -i <seed>
+    out, err := runXraySimple("mlkem768", "-i", seed)
+    if err != nil {
+        return "", err
+    }
+    reClient := regexp.MustCompile(`(?m)^Client:\s*([A-Za-z0-9_-]+)=*$`)
+    mc := reClient.FindStringSubmatch(out)
+    if len(mc) != 2 {
+        return "", fmt.Errorf("无法解析 mlkem768 输出: %s", out)
+    }
+    return mc[1], nil
 }
 
 func createChangeCommand() *cobra.Command {
@@ -598,17 +745,27 @@ func createChangeCommand() *cobra.Command {
 }
 
 func createGenerateCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "generate [type]",
-		Short: "生成密码、UUID、密钥等",
-		Long: `生成各种类型的密码、UUID、密钥。
+    var (
+        vlessAuth      string
+        vlessMode      string
+        vlessServerRTT string
+        vlessClientRTT string
+        vlessPadding   string
+    )
+
+    cmd := &cobra.Command{
+        Use:   "generate [type]",
+        Short: "生成密码、UUID、密钥等",
+        Long: `生成各种类型的密码、UUID、密钥。
 
 支持的类型:
   • password  - 随机密码
   • uuid      - UUID v4
   • ss2022    - Shadowsocks 2022 密钥
   • keypair   - X25519 密钥对
-  • shortid   - REALITY 短 ID`,
+  • shortid   - REALITY 短 ID
+  • vlessenc  - 生成 VLESS Encryption 的 decryption/encryption 配对 (调用 xray)
+  • mlkem     - 生成 ML-KEM-768 密钥材料 (调用 xray)`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			genType := args[0]
@@ -639,9 +796,24 @@ func createGenerateCommand() *cobra.Command {
 				utils.PrintKeyValue("私钥", priv)
 				utils.PrintKeyValue("公钥", pub)
 
-			case "shortid":
-				shortId := utils.GenerateShortID(8)
-				utils.PrintKeyValue("短 ID", shortId)
+            case "shortid":
+                shortId := utils.GenerateShortID(8)
+                utils.PrintKeyValue("短 ID", shortId)
+
+            case "vlessenc":
+                dec, enc, err := composeVLESSENCPair(vlessAuth, vlessMode, vlessServerRTT, vlessClientRTT, vlessPadding)
+                if err != nil {
+                    return err
+                }
+                utils.PrintKeyValue("decryption", dec)
+                utils.PrintKeyValue("encryption", enc)
+
+            case "mlkem":
+                out, err := runXraySimple("mlkem768")
+                if err != nil {
+                    return fmt.Errorf("执行 xray mlkem768 失败: %w", err)
+                }
+                fmt.Print(out)
 
 			default:
 				return fmt.Errorf("不支持的生成类型: %s", genType)
@@ -651,7 +823,14 @@ func createGenerateCommand() *cobra.Command {
 		},
 	}
 
-	return cmd
+    // VLESS-Encryption flags (only effective when type=vlessenc)
+    cmd.Flags().StringVar(&vlessAuth, "auth", "mlkem768", "VLESS-Encryption 认证 (mlkem768|x25519)")
+    cmd.Flags().StringVar(&vlessMode, "mode", "native", "VLESS-Encryption 模式 (native|xorpub|random)")
+    cmd.Flags().StringVar(&vlessServerRTT, "server-rtt", "600s", "服务端 1-RTT 时长（如 600s 或 600-900s；或 0rtt）")
+    cmd.Flags().StringVar(&vlessClientRTT, "client-rtt", "0rtt", "客户端 0-RTT/1-RTT 设置（0rtt 或 如 600s）")
+    cmd.Flags().StringVar(&vlessPadding, "padding", "", "1-RTT padding 规则（以 . 分隔多段，如 100-111-1111.75-0-111.50-0-3333）")
+
+    return cmd
 }
 
 // 服务管理命令
@@ -1112,17 +1291,19 @@ func createLogsCommand() *cobra.Command {
 }
 
 func createVersionCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "version",
-		Short: "显示版本信息",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			utils.PrintSection("版本信息")
-			utils.PrintKeyValue("XRF-Go 版本", "v1.0.0-dev")
-			utils.PrintKeyValue("构建时间", "未设置")
-			utils.PrintKeyValue("Go 版本", "1.23+")
-			return nil
-		},
-	}
+    return &cobra.Command{
+        Use:   "version",
+        Short: "显示版本信息",
+        RunE: func(cmd *cobra.Command, args []string) error {
+            utils.PrintSection("版本信息")
+            utils.PrintKeyValue("XRF-Go 版本", Version)
+            if BuildTime == "" { BuildTime = "未设置" }
+            utils.PrintKeyValue("构建时间", BuildTime)
+            if GitCommit != "" { utils.PrintKeyValue("Git 提交", GitCommit) }
+            utils.PrintKeyValue("Go 版本", "1.23+")
+            return nil
+        },
+    }
 }
 
 func createTLSCommand() *cobra.Command {
@@ -1855,24 +2036,226 @@ func getBBRStatus() (string, error) {
 }
 
 func getCurrentXrayVersion() (string, error) {
-	cmd := exec.Command("xray", "-version")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
+    cmd := exec.Command("xray", "-version")
+    output, err := cmd.Output()
+    if err != nil {
+        return "", err
+    }
 
-	lines := strings.Split(string(output), "\n")
-	if len(lines) > 0 {
-		return strings.TrimSpace(lines[0]), nil
-	}
+    // Try to parse a semantic version token from the first line
+    lines := strings.Split(string(output), "\n")
+    for _, line := range lines {
+        if strings.Contains(line, "Xray") {
+            parts := strings.Fields(line)
+            for i, part := range parts {
+                if part == "Xray" && i+1 < len(parts) {
+                    v := parts[i+1]
+                    if strings.HasPrefix(v, "v") && len(v) > 1 && v[1] >= '0' && v[1] <= '9' {
+                        return v, nil
+                    }
+                    if len(v) > 0 && v[0] >= '0' && v[0] <= '9' {
+                        return "v" + v, nil
+                    }
+                }
+                if part == "version" && i+1 < len(parts) { // handle "Xray version 1.2.3"
+                    v := parts[i+1]
+                    if len(v) > 0 && v[0] >= '0' && v[0] <= '9' {
+                        return "v" + v, nil
+                    }
+                }
+            }
+        }
+    }
 
-	return "", fmt.Errorf("无法解析版本信息")
+    return "unknown", nil
 }
 
 func getLatestXrayVersion() (string, error) {
-	// This would normally fetch from GitHub API or official source
-	// For now, return a placeholder
-	return "v1.8.24", nil
+    // Allow override via environment variable
+    if v := strings.TrimSpace(os.Getenv("XRAY_VERSION")); v != "" && v != "latest" {
+        return v, nil
+    }
+
+    req, err := http.NewRequest("GET", system.XrayReleasesAPI, nil)
+    if err != nil {
+        return "", err
+    }
+    req.Header.Set("Accept", "application/vnd.github+json")
+    req.Header.Set("User-Agent", "xrf-go-cli")
+    if tok := strings.TrimSpace(os.Getenv("GITHUB_TOKEN")); tok != "" {
+        req.Header.Set("Authorization", "Bearer "+tok)
+    }
+
+    client := &http.Client{Timeout: 30 * time.Second}
+    resp, err := client.Do(req)
+    if err != nil {
+        return "", err
+    }
+    defer resp.Body.Close()
+    if resp.StatusCode != http.StatusOK {
+        return "", fmt.Errorf("GitHub API error: %s", resp.Status)
+    }
+    var r struct{ TagName string `json:"tag_name"` }
+    if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+        return "", err
+    }
+    if r.TagName == "" {
+        return "", fmt.Errorf("无法解析最新版本 tag")
+    }
+    return r.TagName, nil
+}
+
+// generateVLESSENCPair 调用 `xray vlessenc` 生成服务端 decryption 与客户端 encryption 字符串
+func generateVLESSENCPair() (string, string, error) {
+    out, err := runXraySimple("vlessenc")
+    if err != nil {
+        return "", "", err
+    }
+    // 首选 ML-KEM-768 段（后量子）。若未能定位，则取最后一组键值
+    // 提取所有 decryption/encryption 值
+    decRe := regexp.MustCompile(`"decryption"\s*:\s*"([^"]+)"`)
+    encRe := regexp.MustCompile(`"encryption"\s*:\s*"([^"]+)"`)
+    decs := decRe.FindAllStringSubmatch(out, -1)
+    encs := encRe.FindAllStringSubmatch(out, -1)
+    if len(decs) == 0 || len(encs) == 0 {
+        return "", "", fmt.Errorf("未能从 xray vlessenc 输出中解析到 decryption/encryption")
+    }
+    // 优先查找“Authentication: ML-KEM-768”后的键值对
+    pqIdx := strings.Index(out, "Authentication: ML-KEM-768")
+    if pqIdx >= 0 {
+        // 在该位置之后，匹配第一对 decryption/encryption
+        tail := out[pqIdx:]
+        pd := decRe.FindStringSubmatch(tail)
+        pe := encRe.FindStringSubmatch(tail)
+        if len(pd) == 2 && len(pe) == 2 {
+            return pd[1], pe[1], nil
+        }
+    }
+    // 否则返回最后一组（通常是 PQ 组）
+    return decs[len(decs)-1][1], encs[len(encs)-1][1], nil
+}
+
+func runXraySimple(args ...string) (string, error) {
+    xrayPath, err := exec.LookPath("xray")
+    if err != nil {
+        return "", fmt.Errorf("未找到 xray 可执行文件，请先安装 Xray 或将其加入 PATH")
+    }
+    cmd := exec.Command(xrayPath, args...)
+    b, err := cmd.CombinedOutput()
+    if err != nil {
+        return "", fmt.Errorf("xray %s 执行失败: %v\n输出: %s", strings.Join(args, " "), err, string(b))
+    }
+    return string(b), nil
+}
+
+// composeVLESSENCPair 根据参数生成 decryption/encryption 配对
+func composeVLESSENCPair(auth, mode, serverRTT, clientRTT, padding string) (string, string, error) {
+    auth = strings.ToLower(strings.TrimSpace(auth))
+    if auth == "" {
+        auth = "mlkem768"
+    }
+    switch auth {
+    case "mlkem768", "x25519":
+    default:
+        return "", "", fmt.Errorf("不支持的认证方式: %s (应为 mlkem768|x25519)", auth)
+    }
+
+    mode = strings.ToLower(strings.TrimSpace(mode))
+    if mode == "" {
+        mode = "native"
+    }
+    switch mode {
+    case "native", "xorpub", "random":
+    default:
+        return "", "", fmt.Errorf("不支持的模式: %s (应为 native|xorpub|random)", mode)
+    }
+
+    if err := validateVERRT(serverRTT); err != nil {
+        return "", "", fmt.Errorf("server-rtt 无效: %w", err)
+    }
+    if err := validateVERRT(clientRTT); err != nil {
+        return "", "", fmt.Errorf("client-rtt 无效: %w", err)
+    }
+    if err := validateVEPadding(padding); err != nil {
+        return "", "", fmt.Errorf("padding 无效: %w", err)
+    }
+
+    // 生成/获取密钥材料
+    var serverKey, clientKey string
+    var err error
+    if auth == "x25519" {
+        serverKey, clientKey, err = utils.GenerateX25519KeyPair()
+        if err != nil {
+            return "", "", fmt.Errorf("生成 X25519 密钥对失败: %w", err)
+        }
+    } else {
+        // 调用 xray 生成 ML-KEM-768 种子与 client 公钥
+        serverKey, clientKey, err = generateMLKEMPair()
+        if err != nil {
+            return "", "", err
+        }
+    }
+
+    prefix := "mlkem768x25519plus"
+    dec := buildVEDot(prefix, mode, serverRTT, padding, serverKey)
+    enc := buildVEDot(prefix, mode, clientRTT, padding, clientKey)
+    return dec, enc, nil
+}
+
+func validateVERRT(s string) error {
+    s = strings.ToLower(strings.TrimSpace(s))
+    if s == "0rtt" {
+        return nil
+    }
+    // 600s 或 600-900s
+    r := regexp.MustCompile(`^\d{1,5}(?:-\d{1,5})?s$`)
+    if !r.MatchString(s) {
+        return fmt.Errorf("必须为 0rtt 或 <sec>s 或 <from>-<to>s，如 600s、600-900s")
+    }
+    return nil
+}
+
+func validateVEPadding(p string) error {
+    if strings.TrimSpace(p) == "" {
+        return nil
+    }
+    // 允许数字/连字符/点分段
+    r := regexp.MustCompile(`^[0-9.-]+$`)
+    if !r.MatchString(p) {
+        return fmt.Errorf("仅允许数字、- 和 . 分隔的段")
+    }
+    return nil
+}
+
+func buildVEDot(prefix, mode, rtt, padding, key string) string {
+    parts := []string{prefix, mode, strings.ToLower(strings.TrimSpace(rtt))}
+    if strings.TrimSpace(padding) != "" {
+        // 用户以 . 分段的 padding
+        for _, seg := range strings.Split(padding, ".") {
+            seg = strings.TrimSpace(seg)
+            if seg != "" {
+                parts = append(parts, seg)
+            }
+        }
+    }
+    parts = append(parts, key)
+    return strings.Join(parts, ".")
+}
+
+func generateMLKEMPair() (seed string, client string, err error) {
+    out, err := runXraySimple("mlkem768")
+    if err != nil {
+        return "", "", err
+    }
+    // Parse lines: Seed: <b64>\nClient: <b64>\n
+    reSeed := regexp.MustCompile(`(?m)^Seed:\s*([A-Za-z0-9_-]+)=*$`)
+    reClient := regexp.MustCompile(`(?m)^Client:\s*([A-Za-z0-9_-]+)=*$`)
+    ms := reSeed.FindStringSubmatch(out)
+    mc := reClient.FindStringSubmatch(out)
+    if len(ms) != 2 || len(mc) != 2 {
+        return "", "", fmt.Errorf("无法解析 mlkem768 输出: %s", out)
+    }
+    return ms[1], mc[1], nil
 }
 
 func cleanLogs() error {

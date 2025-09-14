@@ -36,7 +36,7 @@
 
 ## CI/CD Notes
 - Actions: `actions/checkout@v5`, `actions/setup-go@v5 (go-version-file: go.mod)`, `golangci/golangci-lint-action@v8`
-- Xray is used in CI for config validation; keep asset-name fallbacks intact
+- Xray is used in CI for config validation; resolve release assets dynamically by architecture (no hardcoded filenames)
 
 ## Security & Configuration Tips
 - No secrets in code or logs; use GitHub Encrypted Secrets
