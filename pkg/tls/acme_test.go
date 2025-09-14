@@ -55,13 +55,14 @@ func TestInitialize(t *testing.T) {
 	certDir := filepath.Join(tmpDir, "certs")
 	acmeDir := filepath.Join(tmpDir, "acme")
 
-	manager := NewACMEManager("test@example.com")
-	manager.SetStagingMode() // 使用测试环境
+    manager := NewACMEManager("test@example.com")
+    manager.SetStagingMode() // 使用测试环境
+    manager.SetOfflineMode() // 测试环境下禁用网络请求与注册
 	manager.SetCertDir(certDir)
 	manager.SetACMEDir(acmeDir)
 
-	// 初始化 (注意：这会尝试连接 Let's Encrypt，在测试中可能失败)
-	err := manager.Initialize()
+    // 初始化（离线模式下不会访问网络）
+    err := manager.Initialize()
 
 	// 至少验证目录创建成功
 	if _, err := os.Stat(certDir); os.IsNotExist(err) {
@@ -72,10 +73,9 @@ func TestInitialize(t *testing.T) {
 		t.Errorf("ACME directory was not created: %s", acmeDir)
 	}
 
-	// 如果网络连接失败，我们跳过客户端初始化的测试
-	if err != nil {
-		t.Logf("ACME client initialization failed (expected in test environment): %v", err)
-	}
+    if err != nil {
+        t.Fatalf("ACME manager initialize failed in offline mode: %v", err)
+    }
 }
 
 func TestSaveCertificate(t *testing.T) {

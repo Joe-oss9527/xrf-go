@@ -31,11 +31,12 @@ const (
 
 // ACMEManager ACME 证书管理器
 type ACMEManager struct {
-	email   string
-	caURL   string
-	certDir string
-	acmeDir string
-	client  *lego.Client
+    email   string
+    caURL   string
+    certDir string
+    acmeDir string
+    client  *lego.Client
+    offline bool
 }
 
 // ACMEUser 实现 ACME 用户接口
@@ -89,24 +90,38 @@ func (am *ACMEManager) SetCertDir(certDir string) {
 
 // SetACMEDir 设置 ACME 目录
 func (am *ACMEManager) SetACMEDir(acmeDir string) {
-	am.acmeDir = acmeDir
+    am.acmeDir = acmeDir
+}
+
+// SetOfflineMode 启用离线模式（测试环境使用），跳过网络交互与账户注册
+func (am *ACMEManager) SetOfflineMode() {
+    am.offline = true
 }
 
 // Initialize 初始化 ACME 管理器
 func (am *ACMEManager) Initialize() error {
-	// 创建必要的目录
-	dirs := []string{am.certDir, am.acmeDir}
-	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
-	}
+    // 创建必要的目录
+    dirs := []string{am.certDir, am.acmeDir}
+    for _, dir := range dirs {
+        if err := os.MkdirAll(dir, 0755); err != nil {
+            return fmt.Errorf("failed to create directory %s: %w", dir, err)
+        }
+    }
 
-	// 初始化或加载用户账户
-	user, err := am.getOrCreateUser()
-	if err != nil {
-		return fmt.Errorf("failed to initialize user: %w", err)
-	}
+    // 离线模式：仅创建目录并跳过用户初始化和客户端创建
+    if am.offline {
+        utils.Info("ACME offline mode enabled; skipping user registration and client initialization")
+        utils.Info("Email: %s", am.email)
+        utils.Info("CA URL: %s", am.caURL)
+        utils.Info("Cert Dir: %s", am.certDir)
+        return nil
+    }
+
+    // 初始化或加载用户账户
+    user, err := am.getOrCreateUser()
+    if err != nil {
+        return fmt.Errorf("failed to initialize user: %w", err)
+    }
 
 	// 创建 lego 配置
 	config := lego.NewConfig(user)
