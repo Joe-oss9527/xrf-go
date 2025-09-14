@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
@@ -1248,6 +1249,7 @@ func createRestoreCommand() *cobra.Command {
 func createURLCommand() *cobra.Command {
 	var showHost bool
 	var customHost string
+	var customName string
 
 	cmd := &cobra.Command{
 		Use:   "url [tag]",
@@ -1297,6 +1299,78 @@ func createURLCommand() *cobra.Command {
 				shareURL = strings.Replace(shareURL, "localhost", customHost, 1)
 			}
 
+			// 如果用户指定了自定义显示名称，替换片段
+			if customName != "" {
+				// 移除旧的 fragment 并添加新的（URL 片段）
+				if idx := strings.Index(shareURL, "#"); idx >= 0 {
+					shareURL = shareURL[:idx] + "#" + url.QueryEscape(customName)
+				} else {
+					shareURL = shareURL + "#" + url.QueryEscape(customName)
+				}
+			} else {
+				// 未提供 --name 时，为常用协议提供更友好的默认显示名称
+				if info, err := configMgr.GetProtocolInfo(tag); err == nil {
+					protoType := strings.ToLower(info.Type)
+					var hostForName string
+					if customHost != "" {
+						hostForName = customHost
+					} else if u, err := url.Parse(shareURL); err == nil {
+						hostForName = u.Hostname()
+					}
+					if hostForName == "" {
+						hostForName = "server"
+					}
+					var defaultName string
+					// 读取 streamSettings/network/security 及 settings 信息
+					var network, security, dec, ssMethod string
+					if sm, ok := info.Settings["streamSettings"].(map[string]interface{}); ok {
+						if n, ok := sm["network"].(string); ok {
+							network = strings.ToLower(n)
+						}
+						if s, ok := sm["security"].(string); ok {
+							security = strings.ToLower(s)
+						}
+					}
+					if setts, ok := info.Settings["settings"].(map[string]interface{}); ok {
+						if d, ok := setts["decryption"].(string); ok {
+							dec = strings.ToLower(d)
+						}
+						if m, ok := setts["method"].(string); ok {
+							ssMethod = strings.ToLower(m)
+						}
+					}
+
+					// 判定不同协议的默认备注名称
+					switch {
+					case strings.Contains(protoType, "vless") && security == "reality":
+						defaultName = "Reality-" + hostForName
+					case strings.Contains(protoType, "vless") && network == "ws":
+						defaultName = "VLESS-WS-" + hostForName
+					case strings.Contains(protoType, "vless") && network == "httpupgrade":
+						defaultName = "VLESS-HU-" + hostForName
+					case strings.Contains(protoType, "vless") && dec != "" && dec != "none":
+						defaultName = "VLESS-ENC-" + hostForName
+					case strings.Contains(protoType, "vmess") && network == "ws":
+						defaultName = "VMess-WS-" + hostForName
+					case strings.Contains(protoType, "trojan") && network == "ws":
+						defaultName = "Trojan-WS-" + hostForName
+					case strings.Contains(protoType, "shadowsocks") && strings.HasPrefix(ssMethod, "2022-"):
+						defaultName = "SS2022-" + hostForName
+					case strings.Contains(protoType, "shadowsocks"):
+						defaultName = "SS-" + hostForName
+					}
+					if defaultName != "" {
+						if idx := strings.Index(shareURL, "#"); idx >= 0 {
+							shareURL = shareURL[:idx] + "#" + url.QueryEscape(defaultName)
+						} else {
+							shareURL = shareURL + "#" + url.QueryEscape(defaultName)
+						}
+					}
+				}
+			}
+
+			// 不再附加 remarks 查询参数，保持片段注释即可
+
 			utils.PrintSubSection("分享链接")
 			fmt.Printf("  %s\n", shareURL)
 
@@ -1313,6 +1387,7 @@ func createURLCommand() *cobra.Command {
 
 	cmd.Flags().BoolVar(&showHost, "list", false, "显示所有可用的协议标签")
 	cmd.Flags().StringVar(&customHost, "host", "", "指定服务器主机地址")
+	cmd.Flags().StringVar(&customName, "name", "", "自定义链接显示名称（URL 片段）")
 
 	return cmd
 }

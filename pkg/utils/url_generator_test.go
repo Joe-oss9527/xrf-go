@@ -250,6 +250,44 @@ func TestGenerateProtocolURL_VLESSReality(t *testing.T) {
 	}
 }
 
+func TestGenerateProtocolURL_VLESSRealityWithServerNames(t *testing.T) {
+	cfg := map[string]interface{}{
+		"host":        "example.com",
+		"port":        443,
+		"remark":      "Reality-ServerNames-Test",
+		"uuid":        "00000000-0000-0000-0000-000000000002",
+		"network":     "tcp",
+		"publicKey":   "xL32brlJCeiqgiJ4KOL-22F0bIfoVTyEzmtuTA4Ccjs",
+		"fingerprint": "chrome",
+		"serverNames": []interface{}{"www.microsoft.com", "www.google.com"}, // 测试 serverNames 数组
+		"shortId":     "efgh",
+		"spiderX":     "/test",
+	}
+
+	url, err := GenerateProtocolURL("vless-reality", "Reality-ServerNames-Test", cfg)
+	if err != nil {
+		t.Fatalf("GenerateProtocolURL returned error: %v", err)
+	}
+
+	checks := []string{
+		"vless://00000000-0000-0000-0000-000000000002@example.com:443",
+		"security=reality",
+		"encryption=none",
+		"flow=xtls-rprx-vision",
+		"sni=www.microsoft.com", // 应该使用 serverNames[0]
+		"fp=chrome",
+		"pbk=xL32brlJCeiqgiJ4KOL-22F0bIfoVTyEzmtuTA4Ccjs",
+		"sid=efgh",
+		"spx=%2Ftest", // spiderX URL encoded
+		"#Reality-ServerNames-Test",
+	}
+	for _, want := range checks {
+		if !strings.Contains(url, want) {
+			t.Errorf("VLESS Reality share URL missing %q in %q", want, url)
+		}
+	}
+}
+
 func TestGenerateProtocolURL_VLESSWS(t *testing.T) {
 	cfg := map[string]interface{}{
 		"host":    "example.com",
@@ -278,6 +316,178 @@ func TestGenerateProtocolURL_VLESSWS(t *testing.T) {
 	for _, want := range checks {
 		if !strings.Contains(url, want) {
 			t.Errorf("VLESS WS share URL missing %q in %q", want, url)
+		}
+	}
+}
+
+func TestGenerateShadowsocksURL_AEAD2022(t *testing.T) {
+	// 测试 AEAD-2022 编码（不使用 Base64）
+	url, err := GenerateShadowsocksURL("2022-blake3-aes-256-gcm", "YctPZ6U7xPPcU+gp3u+0tx/tRizJN9K8y+uKlW2qjlI=", "example.com", 8888, "AEAD-2022-Test")
+	if err != nil {
+		t.Fatalf("GenerateShadowsocksURL returned error: %v", err)
+	}
+
+	// 应该使用 percent 编码而不是 Base64
+	expected := "ss://2022-blake3-aes-256-gcm%3AYctPZ6U7xPPcU%2Bgp3u%2B0tx%2FtRizJN9K8y%2BuKlW2qjlI%3D@example.com:8888#AEAD-2022-Test"
+	if url != expected {
+		t.Errorf("AEAD-2022 Shadowsocks URL = %q, want %q", url, expected)
+	}
+}
+
+func TestGenerateShadowsocksURL_Regular(t *testing.T) {
+	// 测试常规方法（使用 Base64URL）
+	url, err := GenerateShadowsocksURL("chacha20-ietf-poly1305", "testpassword", "example.com", 8888, "Regular-Test")
+	if err != nil {
+		t.Fatalf("GenerateShadowsocksURL returned error: %v", err)
+	}
+
+	// 应该使用 Base64URL 编码
+	if !strings.HasPrefix(url, "ss://") || !strings.Contains(url, "@example.com:8888") || !strings.Contains(url, "#Regular-Test") {
+		t.Errorf("Regular Shadowsocks URL format incorrect: %s", url)
+	}
+
+	// 验证 Base64URL 编码
+	parts := strings.Split(strings.TrimPrefix(url, "ss://"), "@")
+	if len(parts) != 2 {
+		t.Errorf("URL format incorrect, expected userinfo@host, got: %s", url)
+	}
+}
+
+func TestGenerateProtocolURL_VLESSEncryption(t *testing.T) {
+	cfg := map[string]interface{}{
+		"host":       "example.com",
+		"port":       443,
+		"remark":     "VLESS-Encryption-Test",
+		"uuid":       "00000000-0000-0000-0000-000000000003",
+		"network":    "tcp",
+		"encryption": "mlkem768x25519plus.native.0rtt.testclientkey12345",
+		"flow":       "xtls-rprx-vision",
+	}
+
+	url, err := GenerateProtocolURL("vless-encryption", "VLESS-Encryption-Test", cfg)
+	if err != nil {
+		t.Fatalf("GenerateProtocolURL returned error: %v", err)
+	}
+
+	checks := []string{
+		"vless://00000000-0000-0000-0000-000000000003@example.com:443",
+		"security=none",
+		"type=tcp",
+		"flow=xtls-rprx-vision",
+		"encryption=mlkem768x25519plus.native.0rtt.testclientkey12345", // 应该不是 none
+		"#VLESS-Encryption-Test",
+	}
+	for _, want := range checks {
+		if !strings.Contains(url, want) {
+			t.Errorf("VLESS Encryption share URL missing %q in %q", want, url)
+		}
+	}
+
+	// 确认不是标准的 encryption=none
+	if strings.Contains(url, "encryption=none") {
+		t.Errorf("VLESS Encryption URL should not use encryption=none, got: %s", url)
+	}
+}
+
+func TestGenerateProtocolURL_VLESSHTTPUpgrade(t *testing.T) {
+	cfg := map[string]interface{}{
+		"host":    "example.com",
+		"port":    8080,
+		"remark":  "VLESS-HTTPUpgrade-Test",
+		"uuid":    "00000000-0000-0000-0000-000000000004",
+		"network": "httpupgrade",
+		"path":    "/upgrade",
+		"headers": map[string]interface{}{
+			"User-Agent": "Mozilla/5.0",
+			"Accept":     "text/html",
+		},
+	}
+
+	url, err := GenerateProtocolURL("vless-httpupgrade", "VLESS-HTTPUpgrade-Test", cfg)
+	if err != nil {
+		t.Fatalf("GenerateProtocolURL returned error: %v", err)
+	}
+
+	checks := []string{
+		"vless://00000000-0000-0000-0000-000000000004@example.com:8080",
+		"security=none",
+		"encryption=none",
+		"type=httpupgrade",
+		"path=%2Fupgrade",
+		"host=example.com",
+		"#VLESS-HTTPUpgrade-Test",
+	}
+	for _, want := range checks {
+		if !strings.Contains(url, want) {
+			t.Errorf("VLESS HTTPUpgrade share URL missing %q in %q", want, url)
+		}
+	}
+}
+
+func TestGenerateProtocolURL_VEAlias(t *testing.T) {
+	// 测试 've' 别名是否能正确处理 VLESS-Encryption
+	cfg := map[string]interface{}{
+		"host":       "example.com",
+		"port":       443,
+		"remark":     "VE-Alias-Test",
+		"uuid":       "00000000-0000-0000-0000-000000000005",
+		"network":    "tcp",
+		"decryption": "mlkem768x25519plus.native.600s.100-111-1111.privatekey12345", // 服务端配置
+		"flow":       "xtls-rprx-vision",
+	}
+
+	url, err := GenerateProtocolURL("ve", "VE-Alias-Test", cfg)
+	if err != nil {
+		t.Fatalf("GenerateProtocolURL returned error: %v", err)
+	}
+
+	checks := []string{
+		"vless://00000000-0000-0000-0000-000000000005@example.com:443",
+		"security=none",
+		"type=tcp",
+		"flow=xtls-rprx-vision",
+		"#VE-Alias-Test",
+	}
+	for _, want := range checks {
+		if !strings.Contains(url, want) {
+			t.Errorf("VE alias share URL missing %q in %q", want, url)
+		}
+	}
+
+	// 应该尝试从 decryption 推导 encryption（虽然这里会使用回退）
+	if !strings.Contains(url, "encryption=") {
+		t.Errorf("VE URL should contain encryption parameter, got: %s", url)
+	}
+}
+
+func TestGenerateProtocolURL_HUAlias(t *testing.T) {
+	// 测试 'hu' 别名是否能正确处理 VLESS-HTTPUpgrade
+	cfg := map[string]interface{}{
+		"host":    "example.com",
+		"port":    8080,
+		"remark":  "HU-Alias-Test",
+		"uuid":    "00000000-0000-0000-0000-000000000006",
+		"network": "httpupgrade",
+		"path":    "/api/upgrade",
+	}
+
+	url, err := GenerateProtocolURL("hu", "HU-Alias-Test", cfg)
+	if err != nil {
+		t.Fatalf("GenerateProtocolURL returned error: %v", err)
+	}
+
+	checks := []string{
+		"vless://00000000-0000-0000-0000-000000000006@example.com:8080",
+		"security=none",
+		"encryption=none",
+		"type=httpupgrade",
+		"path=%2Fapi%2Fupgrade",
+		"host=example.com",
+		"#HU-Alias-Test",
+	}
+	for _, want := range checks {
+		if !strings.Contains(url, want) {
+			t.Errorf("HU alias share URL missing %q in %q", want, url)
 		}
 	}
 }

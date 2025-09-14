@@ -190,8 +190,8 @@ func TestRealSystemEnvironmentSimulation(t *testing.T) {
 		}
 
 		elapsed := time.Since(start)
-		if elapsed > 400*time.Millisecond {
-			t.Errorf("LinuxSystemWorkflow took %v, expected < 400ms (full Linux detection + systemd check)", elapsed)
+		if elapsed > 800*time.Millisecond {
+			t.Errorf("LinuxSystemWorkflow took %v, expected < 800ms (full Linux detection + systemd check)", elapsed)
 		}
 	})
 

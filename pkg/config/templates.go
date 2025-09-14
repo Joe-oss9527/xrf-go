@@ -70,7 +70,7 @@ const VLESSRealityInboundTemplate = `{
           "minClientVer": "",
           "maxClientVer": "",
           "maxTimeDiff": 0,
-          "spiderX": ""
+          "spiderX": "/"
         },
         "sockopt": {
           "tcpKeepAliveIdle": 300,

@@ -551,6 +551,9 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 								if fingerprint, exists := realityMap["fingerprint"]; exists {
 									urlConfig["fingerprint"] = fingerprint
 								}
+								if spiderX, exists := realityMap["spiderX"]; exists {
+									urlConfig["spiderX"] = spiderX
+								}
 							}
 						}
 

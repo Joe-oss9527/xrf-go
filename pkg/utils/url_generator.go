@@ -102,7 +102,7 @@ func GenerateTrojanURL(password, host string, port int, params map[string]string
 	return u.String(), nil
 }
 
-// GenerateShadowsocksURL 生成 Shadowsocks 分享链接
+// GenerateShadowsocksURL 生成 Shadowsocks 分享链接 (SIP002 标准)
 func GenerateShadowsocksURL(method, password, host string, port int, remark string) (string, error) {
 	if method == "" || password == "" || host == "" || port == 0 {
 		return "", fmt.Errorf("method, password, host, and port are required")
@@ -110,10 +110,19 @@ func GenerateShadowsocksURL(method, password, host string, port int, remark stri
 
 	// 构建 user info: method:password
 	userInfo := fmt.Sprintf("%s:%s", method, password)
-	encoded := base64.URLEncoding.EncodeToString([]byte(userInfo))
+
+	// SIP002 标准: 对于 Stream 和 AEAD 推荐使用 Base64URL 编码，对于 AEAD-2022 必须不编码
+	var userInfoEncoded string
+	if strings.HasPrefix(method, "2022-") {
+		// AEAD-2022: 必须进行 percent 编码，不能使用 Base64
+		userInfoEncoded = url.QueryEscape(userInfo)
+	} else {
+		// Stream 和 AEAD: 推荐使用 Base64URL 编码
+		userInfoEncoded = base64.URLEncoding.EncodeToString([]byte(userInfo))
+	}
 
 	// 构建 URL
-	baseURL := fmt.Sprintf("ss://%s@%s:%d", encoded, host, port)
+	baseURL := fmt.Sprintf("ss://%s@%s:%d", userInfoEncoded, host, port)
 
 	if remark != "" {
 		baseURL += "#" + url.QueryEscape(remark)
@@ -134,7 +143,7 @@ func GenerateProtocolURL(protocolType, tag string, config map[string]interface{}
 	port := getIntValue(config, "port", 0)
 
 	switch {
-	case strings.Contains(protocolType, "vless"):
+	case strings.Contains(protocolType, "vless") || protocolType == "ve" || protocolType == "hu":
 		uuid := getStringValue(config, "uuid", "")
 		if uuid == "" {
 			// 尝试从 clients 中获取
@@ -149,7 +158,37 @@ func GenerateProtocolURL(protocolType, tag string, config map[string]interface{}
 		params["encryption"] = "none"
 
 		// 根据协议类型或安全类型添加特定参数
-		if strings.Contains(protocolType, "reality") || strings.ToLower(getStringValue(config, "security", "")) == "reality" {
+		if strings.Contains(protocolType, "encryption") || strings.EqualFold(protocolType, "ve") {
+			// VLESS-Encryption (Post-Quantum) 协议处理
+			params["security"] = "none" // 通常不需要额外的传输层安全
+			params["type"] = "tcp"
+
+			// VLESS-Encryption 的关键特征：使用真实的 encryption 而不是 "none"
+			if encValue := getStringValue(config, "encryption", ""); encValue != "" && encValue != "none" {
+				params["encryption"] = encValue
+			} else {
+				// 如果没有明确的 encryption，尝试从 decryption 推导
+				if decValue := getStringValue(config, "decryption", ""); decValue != "" && decValue != "none" {
+					// 尝试从服务端 decryption 推导客户端 encryption
+					if derivedEnc, err := deriveEncryptionFromDecryption(decValue); err == nil {
+						params["encryption"] = derivedEnc
+					} else {
+						// 回退到标准 VLESS
+						params["encryption"] = "none"
+					}
+				} else {
+					params["encryption"] = "none"
+				}
+			}
+
+			// Flow 参数（VLESS-Encryption 推荐使用 XTLS）
+			flow := getStringValue(config, "flow", "")
+			if flow == "" {
+				flow = "xtls-rprx-vision"
+			}
+			params["flow"] = flow
+
+		} else if strings.Contains(protocolType, "reality") || strings.ToLower(getStringValue(config, "security", "")) == "reality" {
 			// VLESS REALITY (Vision) 推荐参数
 			params["security"] = "reality"
 			params["encryption"] = "none"
@@ -163,24 +202,60 @@ func GenerateProtocolURL(protocolType, tag string, config map[string]interface{}
 			// REALITY 相关参数
 			params["pbk"] = getStringValue(config, "publicKey", "")
 			params["fp"] = getStringValue(config, "fingerprint", "chrome")
-			params["sni"] = getStringValue(config, "serverName", host)
+			// SNI: 优先使用 serverName，然后尝试 serverNames[0]，最后使用 host
+			sniValue := getStringValue(config, "serverName", "")
+			if sniValue == "" {
+				if serverNames := getServerNamesFromConfig(config); len(serverNames) > 0 {
+					sniValue = serverNames[0]
+				} else {
+					sniValue = host
+				}
+			}
+			params["sni"] = sniValue
 			params["sid"] = getStringValue(config, "shortId", "")
+			// SpiderX (client param key: spx). Default to '/' for best compatibility
+			if spx := getStringValue(config, "spiderX", "/"); spx != "" {
+				params["spx"] = spx
+			}
+			// ALPN: many clients use h2 for REALITY; default to h2 when unset
+			if alpn := getStringValue(config, "alpn", ""); alpn != "" {
+				params["alpn"] = alpn
+			} else {
+				params["alpn"] = "h2"
+			}
 			// 明确 headerType=none 以提升兼容性
 			if params["type"] == "tcp" {
 				params["headerType"] = "none"
 			}
 		} else if strings.Contains(protocolType, "ws") {
 			params["security"] = "tls"
+			params["type"] = "ws"
 			params["path"] = getStringValue(config, "path", "/")
 			params["host"] = host
 			// 为 TLS 客户端指定 SNI（多数客户端支持且为推荐做法）
-			params["sni"] = host
+			sniValue := getStringValue(config, "sni", host)
+			params["sni"] = sniValue
 			if alpn := getStringValue(config, "alpn", ""); alpn != "" {
 				params["alpn"] = alpn
 			}
-		} else if strings.Contains(protocolType, "httpupgrade") {
-			params["security"] = "none"
+		} else if strings.Contains(protocolType, "httpupgrade") || strings.EqualFold(protocolType, "hu") {
+			// VLESS-HTTPUpgrade 协议处理
+			params["type"] = "httpupgrade"
+			params["security"] = "none" // HTTPUpgrade 通常不使用 TLS（由反向代理处理）
 			params["path"] = getStringValue(config, "path", "/")
+
+			// HTTPUpgrade 特定参数
+			if host != "" {
+				params["host"] = host // HTTP Host header
+			}
+
+			// 可选：自定义 headers (如果配置中有)
+			if headers := getHeadersFromConfig(config); len(headers) > 0 {
+				// 将 headers 编码为 URL 参数（简化处理）
+				for key, value := range headers {
+					params["header_"+key] = value
+				}
+			}
 		}
 
 		if remark := getStringValue(config, "remark", tag); remark != "" {
@@ -262,6 +337,97 @@ func getIntValue(config map[string]interface{}, key string, defaultValue int) in
 		}
 	}
 	return defaultValue
+}
+
+// deriveEncryptionFromDecryption 从服务端 decryption 推导客户端 encryption
+func deriveEncryptionFromDecryption(decryption string) (string, error) {
+	parts := strings.Split(decryption, ".")
+	if len(parts) < 4 {
+		return "", fmt.Errorf("invalid decryption format")
+	}
+	prefix, mode := parts[0], parts[1]
+	// rest contains RTT settings and key materials
+	rest := parts[3:]
+	if len(rest) == 0 {
+		return "", fmt.Errorf("decryption missing key segment")
+	}
+
+	// Identify the key (usually the last base64-looking segment)
+	key := rest[len(rest)-1]
+
+	// Try to determine key type by length after base64 decode
+	var keyBytes []byte
+	if kb, err := base64.RawURLEncoding.DecodeString(key); err == nil {
+		keyBytes = kb
+	} else {
+		return "", fmt.Errorf("failed to parse key: %v", err)
+	}
+
+	var clientKey string
+	switch len(keyBytes) {
+	case 32: // X25519 private -> derive public
+		pub, err := DeriveX25519Public(key)
+		if err != nil {
+			return "", err
+		}
+		clientKey = pub
+	case 64: // ML-KEM-768 seed -> derive client key (would need xray command)
+		// For URL generation, we'll use a placeholder since we can't call xray here
+		// In practice, this should be pre-computed and stored in config
+		clientKey = key // Use seed as placeholder - should be replaced with actual client key
+	default:
+		return "", fmt.Errorf("unsupported key length: %d", len(keyBytes))
+	}
+
+	// Build client encryption with 0rtt preference
+	clientRTT := "0rtt"
+	enc := buildVEEncryption(prefix, mode, clientRTT, "", clientKey)
+	return enc, nil
+}
+
+// buildVEEncryption builds VLESS-Encryption parameter string
+func buildVEEncryption(prefix, mode, rtt, padding, key string) string {
+	parts := []string{prefix, mode, strings.ToLower(strings.TrimSpace(rtt))}
+	if strings.TrimSpace(padding) != "" {
+		for _, seg := range strings.Split(padding, ".") {
+			seg = strings.TrimSpace(seg)
+			if seg != "" {
+				parts = append(parts, seg)
+			}
+		}
+	}
+	parts = append(parts, key)
+	return strings.Join(parts, ".")
+}
+
+// getHeadersFromConfig extracts HTTP headers from config
+func getHeadersFromConfig(config map[string]interface{}) map[string]string {
+	headers := make(map[string]string)
+	if headersVal, exists := config["headers"]; exists {
+		if headersMap, ok := headersVal.(map[string]interface{}); ok {
+			for key, value := range headersMap {
+				if strVal, ok := value.(string); ok {
+					headers[key] = strVal
+				}
+			}
+		}
+	}
+	return headers
+}
+
+func getServerNamesFromConfig(config map[string]interface{}) []string {
+	if serverNames, exists := config["serverNames"]; exists {
+		if serverNameList, ok := serverNames.([]interface{}); ok {
+			var result []string
+			for _, serverName := range serverNameList {
+				if name, ok := serverName.(string); ok {
+					result = append(result, name)
+				}
+			}
+			return result
+		}
+	}
+	return nil
 }
 
 func getClientsFromConfig(config map[string]interface{}) []map[string]interface{} {
