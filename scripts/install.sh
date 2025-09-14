@@ -5,29 +5,120 @@
 
 set -euo pipefail
 
-# 颜色定义
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# 检查并加载共享工具函数
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMMON_SH="${SCRIPT_DIR}/common.sh"
 
-# 日志函数
-info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
+# 如果存在本地 common.sh，则加载它（开发环境）
+if [[ -f "$COMMON_SH" ]]; then
+    source "$COMMON_SH"
+    # 统一本脚本的日志接口
+    info() { log_info "$1"; }
+    success() { log_success "$1"; }
+    warning() { log_warning "$1"; }
+    error() { log_error "$1"; exit 1; }
+else
+    # 生产环境：内嵌必要的工具函数
 
-success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
+    # 颜色定义
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m' # No Color
 
-warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
+    # 日志函数
+    info() {
+        echo -e "${BLUE}[INFO]${NC} $1"
+    }
 
-error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-    exit 1
+    success() {
+        echo -e "${GREEN}[SUCCESS]${NC} $1"
+    }
+
+    warning() {
+        echo -e "${YELLOW}[WARNING]${NC} $1"
+    }
+
+    error() {
+        echo -e "${RED}[ERROR]${NC} $1"
+        exit 1
+    }
+
+    # 内嵌核心工具函数
+    _trim() {
+        local s="${1:-}"
+        echo "${s}" | sed 's/^\s\+//;s/\s\+$//'
+    }
+
+    _is_valid_tag() {
+        local tag="$(_trim "${1:-}")"
+        [[ -n "$tag" ]] || return 1
+        [[ ! "$tag" =~ ^https?:// ]] || return 1
+        [[ ! "$tag" =~ / ]] || return 1
+        [[ ! "$tag" =~ : ]] || return 1
+        [[ "$tag" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+    }
+
+    extract_tag_name() {
+        local release_json="$1"
+        if [[ -z "$release_json" ]]; then
+            return 1
+        fi
+
+        if command -v jq >/dev/null 2>&1; then
+            echo "$release_json" | jq -r '.tag_name'
+        else
+            echo "$release_json" | grep '"tag_name":' | awk -F'"' '{print $4}'
+        fi
+    }
+
+    get_github_latest_version() {
+        local repo="$1"
+        local user_agent="${2:-xrf-go-installer}"
+
+        local curl_opts=(
+            -fsSL
+            -H "Accept: application/vnd.github+json"
+            -H "User-Agent: $user_agent"
+        )
+
+        if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+            curl_opts+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" )
+        fi
+
+        local release_json
+        release_json=$(curl "${curl_opts[@]}" "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null || echo "")
+
+        if [[ -n "$release_json" ]]; then
+            local tag
+            tag=$(extract_tag_name "$release_json" || echo "")
+            if _is_valid_tag "$tag"; then
+                echo "$tag"
+                return 0
+            fi
+        fi
+
+        # fallback: 通过重定向解析最新 tag
+        local effective
+        effective=$(curl -fsSLI -o /dev/null -w '%{url_effective}' -H "User-Agent: $user_agent" "https://github.com/${repo}/releases/latest" 2>/dev/null || echo "")
+        if [[ -n "$effective" ]]; then
+            local tag_from_url
+            tag_from_url=$(echo "$effective" | sed -n 's#.*/releases/tag/\([^/?]*\).*#\1#p')
+            if _is_valid_tag "$tag_from_url"; then
+                echo "$tag_from_url"
+                return 0
+            fi
+        fi
+
+        return 1
+    }
+fi
+
+# 额外保护：本脚本内部也做一次 tag 校验（独立于 common.sh）
+is_valid_tag() {
+    local tag="$1"
+    [[ -n "$tag" ]] && [[ ! "$tag" =~ ^https?:// ]] && [[ ! "$tag" =~ / ]] && [[ ! "$tag" =~ : ]] && [[ "$tag" =~ ^[A-Za-z0-9._-]+$ ]]
 }
 
 # 检查用户权限 - 支持root用户和sudo权限
@@ -97,6 +188,8 @@ check_dependencies() {
     success "系统依赖检查通过"
 }
 
+# 这些函数现在已经在 common.sh 中定义或内嵌在上方
+
 # 从 GitHub Release JSON 中按名称正则选择资产下载地址
 # 参数: $1=release_json $2=name_regex (grep -E 风格)
 select_asset_url() {
@@ -139,7 +232,10 @@ install_xray() {
         if [[ -n "${GITHUB_TOKEN:-}" ]]; then
             curl_opts+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" )
         fi
-        xray_version=$(curl "${curl_opts[@]}" "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | grep '"tag_name":' | cut -d'"' -f4 || true)
+        xray_version=$(get_github_latest_version "XTLS/Xray-core" "xrf-go-installer" || true)
+        if ! is_valid_tag "${xray_version:-}"; then
+            error "获取到的 Xray 版本号不合法：${xray_version:-<empty>}\n请检查网络/令牌，或显式设置 XRAY_VERSION=vX.Y.Z 再试。"
+        fi
         if [[ -z "$xray_version" ]]; then
             error "无法获取 Xray 最新版本。请检查网络或：\n  - 设置 GITHUB_TOKEN 以避免 GitHub API 限流\n  - 或显式指定版本：XRAY_VERSION=v26.x.y bash install.sh"
         fi
@@ -193,18 +289,23 @@ install_xray() {
 install_xrf_go() {
     info "正在安装 XRF-Go..."
     
-    # 获取最新 Release JSON
+    # 获取最新版本
+    local xrf_version=$(get_github_latest_version "Joe-oss9527/xrf-go" "xrf-go-installer" || true)
+    if [[ -z "$xrf_version" ]]; then
+        error "无法获取 XRF-Go 最新版本。\n建议：\n  • 检查网络连通性或稍后重试\n  • 设置 GITHUB_TOKEN 以避免 GitHub API 限流\n  • 手动查看发布页：https://github.com/Joe-oss9527/xrf-go/releases/latest"
+    fi
+    if ! is_valid_tag "${xrf_version:-}"; then
+        error "获取到的 XRF-Go 版本号不合法：${xrf_version:-<empty>}\n请检查网络/令牌，或手动指定版本。"
+    fi
+
+    # 获取 Release JSON 用于资产选择
     local curl_opts=( -fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: xrf-go-installer" )
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
         curl_opts+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" )
     fi
     local xrf_json=$(curl "${curl_opts[@]}" "https://api.github.com/repos/Joe-oss9527/xrf-go/releases/latest" || true)
     if [[ -z "$xrf_json" ]]; then
-        error "无法获取 XRF-Go 最新版本信息（API 访问失败）。\n建议：\n  • 检查网络连通性或稍后重试\n  • 设置 GITHUB_TOKEN 以避免 GitHub API 限流\n  • 手动查看发布页：https://github.com/Joe-oss9527/xrf-go/releases/latest"
-    fi
-    local xrf_version=$(echo "$xrf_json" | grep '"tag_name":' | cut -d '"' -f4)
-    if [[ -z "$xrf_version" ]]; then
-        error "无法解析 XRF-Go 最新版本（tag_name 缺失）。\n发布页：https://github.com/Joe-oss9527/xrf-go/releases/latest"
+        error "无法获取 XRF-Go Release 信息用于资产下载。\n手动查看发布页：https://github.com/Joe-oss9527/xrf-go/releases/latest"
     fi
 
     local temp_dir=$(mktemp -d)

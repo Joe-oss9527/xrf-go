@@ -36,21 +36,9 @@ jobs:
     - name: Install Xray for testing
       run: |
         set -euo pipefail
-        # Download and install Xray for configuration validation in tests
-        # Get latest version dynamically
-        XRAY_VERSION=$(curl -fsSL "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | jq -r .tag_name || true)
-        if [ -z "$XRAY_VERSION" ]; then
-          echo "Failed to get latest version, using fallback"
-          XRAY_VERSION="v25.8.31"
-        fi
-        echo "Installing Xray $XRAY_VERSION"
-        # Try known asset names to avoid 404 on naming changes
-          if ! curl -fL -o /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-64.zip"; then
-            curl -fL -o /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-amd64.zip"
-          fi
-          unzip -q -d /tmp /tmp/xray.zip
-          sudo install -m 755 /tmp/xray /usr/local/bin/xray
-        xray version
+        # Use shared installation logic
+        source scripts/common.sh
+        install_xray_for_automation
     
     - name: Run tests
       run: |
@@ -127,3 +115,67 @@ jobs:
           git diff
           exit 1
         fi
+
+  shellcheck:
+    name: Shell Scripts Lint
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+    - name: Install shellcheck
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y shellcheck
+    - name: Run shellcheck
+      run: |
+        shellcheck --version
+        shellcheck -x scripts/*.sh
+
+  installer-dry-run:
+    name: Installer Dry-Run
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+    - name: Exercise version and asset discovery (no downloads)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        source scripts/common.sh
+
+        echo "[Dry-Run] Resolving latest tags..."
+        xr_tag=$(get_xray_latest_version)
+        xrf_tag=$(get_xrf_latest_version)
+        echo "Xray tag: $xr_tag"
+        echo "XRF-Go tag: $xrf_tag"
+
+        ua="xrf-go-ci"
+        curl_opts=( -fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: ${ua}" )
+        if [ -n "${GITHUB_TOKEN:-}" ]; then
+          curl_opts+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" )
+        fi
+
+        # Check Xray assets for both archs
+        for ARCH in amd64 arm64; do
+          echo "\n[Xray] Selecting asset for ${ARCH}..."
+          xr_json=$(curl "${curl_opts[@]}" "https://api.github.com/repos/XTLS/Xray-core/releases/tags/${xr_tag}")
+          if [ "$ARCH" = amd64 ]; then
+            name_regex='^Xray-.*linux.*(64|amd64).*\.zip$'
+          else
+            name_regex='^Xray-.*linux.*(arm64|arm64-v8a).*\.zip$'
+          fi
+          dl=$(select_asset_url "$xr_json" "$name_regex" || true)
+          echo "Selected: ${dl:-<none>}"
+          [ -n "${dl:-}" ] && echo "$dl" | grep -qiE '\.zip$'
+        done
+
+        # Check XRF-Go assets for both archs (latest release JSON)
+        xrf_json=$(curl "${curl_opts[@]}" "https://api.github.com/repos/${{ github.repository }}/releases/latest")
+        for ARCH in amd64 arm64; do
+          echo "\n[XRF-Go] Selecting asset for ${ARCH}..."
+          name_regex="^xrf-.*linux-${ARCH}.*\\.(tar\\.gz|tgz)$"
+          dl=$(select_asset_url "$xrf_json" "$name_regex" || true)
+          echo "Selected: ${dl:-<none>}"
+          [ -n "${dl:-}" ] && echo "$dl" | grep -qiE '\.(tar\.gz|tgz)$'
+        done

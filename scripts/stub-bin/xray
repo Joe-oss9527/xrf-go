@@ -1,6 +1,26 @@
 #!/usr/bin/env bash
 set -e
 
+# Get dynamic Xray version for stub
+get_stub_version() {
+    # Try to use shared common.sh if available
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local common_sh="${script_dir}/../common.sh"
+
+    if [[ -f "$common_sh" ]]; then
+        source "$common_sh" 2>/dev/null && {
+            local version=$(get_xray_latest_version 2>/dev/null || echo "")
+            if [[ -n "$version" ]]; then
+                echo "Xray-core $version (stub)"
+                return 0
+            fi
+        }
+    fi
+
+    # Fallback to current known version
+    echo "Xray-core v25.9.11 (stub)"
+}
+
 case "$1" in
   run)
     # Support: xray run -test -confdir <dir>
@@ -10,7 +30,7 @@ case "$1" in
     fi
     ;;
   version|-version)
-    echo "Xray-core v25.8.31 (stub)"
+    get_stub_version
     exit 0
     ;;
 esac

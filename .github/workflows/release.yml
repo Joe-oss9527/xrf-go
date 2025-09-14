@@ -49,21 +49,9 @@ jobs:
     - name: Install Xray for testing
       run: |
         set -euo pipefail
-        # Download and install Xray for configuration validation in tests
-        # Get latest version dynamically
-        XRAY_VERSION=$(curl -fsSL "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | jq -r .tag_name || true)
-        if [ -z "$XRAY_VERSION" ]; then
-          echo "Failed to get latest version, using fallback"
-          XRAY_VERSION="v25.8.31"
-        fi
-        echo "Installing Xray $XRAY_VERSION"
-        # Try known asset names to avoid 404 on naming changes
-        if ! curl -fL -o /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-64.zip"; then
-          curl -fL -o /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-amd64.zip"
-        fi
-        unzip -q -d /tmp /tmp/xray.zip
-        sudo install -m 755 /tmp/xray /usr/local/bin/xray
-        xray version
+        # Use shared installation logic
+        source scripts/common.sh
+        install_xray_for_automation
     
     - name: Run tests
       run: |
