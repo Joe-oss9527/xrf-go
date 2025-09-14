@@ -630,20 +630,20 @@ func deriveVEEncryption(decryption string) (string, error) {
         return "", fmt.Errorf("无法解析密钥: %v", err)
     }
     var clientKey string
-    switch len(keyBytes) {
-    case 32: // X25519 private -> derive public
-        pub, err := utils.DeriveX25519Public(key)
-        if err != nil {
-            return "", err
-        }
-        clientKey = pub
-    case 64: // ML-KEM-768 seed -> derive client via xray
-        ck, err := deriveMLKEMClientFromSeed(key)
-        if err != nil {
-            return "", err
-        }
-        clientKey = ck
-    default:
+	switch len(keyBytes) {
+	case 32: // X25519 private -> derive public
+		pub, err := utils.DeriveX25519Public(key)
+		if err != nil {
+			return "", err
+		}
+		clientKey = pub
+	case 64: // ML-KEM-768 seed -> derive client via xray
+		ck, err := deriveMLKEMClientFromSeed(key)
+		if err != nil {
+			return "", err
+		}
+		clientKey = ck
+	default:
         return "", fmt.Errorf("不支持的密钥长度: %d", len(keyBytes))
     }
     // Prefer 0rtt on client
@@ -2120,25 +2120,25 @@ func runXraySimple(args ...string) (string, error) {
 
 // composeVLESSENCPair 根据参数生成 decryption/encryption 配对
 func composeVLESSENCPair(auth, mode, serverRTT, clientRTT, padding string) (string, string, error) {
-    auth = strings.ToLower(strings.TrimSpace(auth))
-    if auth == "" {
-        auth = "mlkem768"
-    }
-    switch auth {
-    case "mlkem768", "x25519":
-    default:
-        return "", "", fmt.Errorf("不支持的认证方式: %s (应为 mlkem768|x25519)", auth)
-    }
+	auth = strings.ToLower(strings.TrimSpace(auth))
+	if auth == "" {
+		auth = "mlkem768"
+	}
+	switch auth {
+	case "mlkem768", "x25519":
+	default:
+		return "", "", fmt.Errorf("不支持的认证方式: %s (应为 mlkem768|x25519)", auth)
+	}
 
-    mode = strings.ToLower(strings.TrimSpace(mode))
-    if mode == "" {
-        mode = "native"
-    }
-    switch mode {
-    case "native", "xorpub", "random":
-    default:
-        return "", "", fmt.Errorf("不支持的模式: %s (应为 native|xorpub|random)", mode)
-    }
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	if mode == "" {
+		mode = "native"
+	}
+	switch mode {
+	case "native", "xorpub", "random":
+	default:
+		return "", "", fmt.Errorf("不支持的模式: %s (应为 native|xorpub|random)", mode)
+	}
 
     if err := validateVERRT(serverRTT); err != nil {
         return "", "", fmt.Errorf("server-rtt 无效: %w", err)
