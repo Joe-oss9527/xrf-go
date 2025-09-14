@@ -46,7 +46,8 @@ func main() {
 该工具专注核心功能，避免过度工程化，以多配置同时运行为核心设计。
 
 支持的协议:
-  • VLESS-REALITY (vr)    - 推荐
+  • VLESS-REALITY (vr)      - 推荐
+  • VLESS-Encryption (ve)   - 后量子加密
   • VLESS-WebSocket-TLS (vw)
   • VMess-WebSocket-TLS (vmess)
   • VLESS-HTTPUpgrade (hu)
