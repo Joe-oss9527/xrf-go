@@ -1,8 +1,8 @@
 # XRF-Go
 
-[![Go Version](https://img.shields.io/github/go-mod/go-version/Joe-oss9527/xrf-go)](https://golang.org/)
-[![Release](https://img.shields.io/github/v/release/Joe-oss9527/xrf-go)](https://github.com/Joe-oss9527/xrf-go/releases)
-[![CI](https://github.com/Joe-oss9527/xrf-go/workflows/CI/badge.svg)](https://github.com/Joe-oss9527/xrf-go/actions)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/Joe-oss9527/xrf-go)](https://go.dev/)
+[![Version](https://img.shields.io/github/v/tag/Joe-oss9527/xrf-go?label=version&sort=semver)](https://github.com/Joe-oss9527/xrf-go/tags)
+[![CI](https://github.com/Joe-oss9527/xrf-go/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Joe-oss9527/xrf-go/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/Joe-oss9527/xrf-go)](LICENSE)
 
 XRF-Go 是一个高效、简洁的 Xray 安装配置工具，专为简化 Xray 部署和管理而设计。
