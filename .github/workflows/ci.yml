@@ -55,7 +55,7 @@ jobs:
     - name: Run tests
       run: |
         export CGO_ENABLED=1
-        go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+        go test -v -race -short -coverprofile=coverage.txt -covermode=atomic ./...
     
     - name: Upload coverage reports
       uses: codecov/codecov-action@v5

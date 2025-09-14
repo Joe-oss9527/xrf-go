@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-    "github.com/Joe-oss9527/xrf-go/pkg/utils"
+	"github.com/Joe-oss9527/xrf-go/pkg/utils"
 )
 
 const (
