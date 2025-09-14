@@ -30,6 +30,20 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
+# 统一 cURL 额外参数（可用环境变量覆盖）
+_curl_common_opts() {
+    local common=( -fsSL --connect-timeout "${CURL_CONNECT_TIMEOUT:-5}" --max-time "${CURL_MAX_TIME:-30}" --retry "${CURL_RETRY:-3}" --retry-all-errors )
+    if [[ "${FORCE_IPV4:-}" == "1" ]]; then
+        common+=( -4 )
+    fi
+    if [[ -n "${CURL_EXTRA_OPTS:-}" ]]; then
+        # shellcheck disable=SC2206
+        local extra=( ${CURL_EXTRA_OPTS} )
+        common+=( "${extra[@]}" )
+    fi
+    printf '%s\n' "${common[@]}"
+}
+
 # 轻量级空白裁剪
 _trim() {
     local s="${1:-}"
@@ -74,11 +88,9 @@ get_github_latest_version() {
     local repo="$1"
     local user_agent="${2:-xrf-go-tools}"
 
-    local curl_opts=(
-        -fsSL
-        -H "Accept: application/vnd.github+json"
-        -H "User-Agent: $user_agent"
-    )
+    local base_opts=()
+    mapfile -t base_opts < <(_curl_common_opts)
+    local curl_opts=( "${base_opts[@]}" -H "Accept: application/vnd.github+json" -H "User-Agent: $user_agent" )
 
     # 如果设置了 GITHUB_TOKEN，添加认证头
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
@@ -99,8 +111,10 @@ get_github_latest_version() {
 
     # Fallback: 通过 latest 页面重定向解析 tag，避免 API 限流或缺失 jq
     # 使用 -I 获取头部并打印最终URL；某些环境需要 -L 以跟随 302
+    local base2=()
+    mapfile -t base2 < <(_curl_common_opts)
     local effective
-    effective=$(curl -fsSLI -o /dev/null -w '%{url_effective}' -H "User-Agent: $user_agent" "https://github.com/${repo}/releases/latest" 2>/dev/null || echo "")
+    effective=$(curl "${base2[@]}" -I -o /dev/null -w '%{url_effective}' -H "User-Agent: $user_agent" "https://github.com/${repo}/releases/latest" 2>/dev/null || echo "")
     if [[ -n "$effective" ]]; then
         # 期望形如 .../releases/tag/<TAG>
         local tag_from_url
