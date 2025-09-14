@@ -1,5 +1,9 @@
 name: Release
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     tags:
@@ -28,7 +32,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.25'
+        go-version-file: 'go.mod'
         cache: true
     
     - name: Get version
@@ -44,6 +48,7 @@ jobs:
     
     - name: Install Xray for testing
       run: |
+        set -euo pipefail
         # Download and install Xray for configuration validation in tests
         # Get latest version dynamically
         XRAY_VERSION=$(curl -fsSL "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | grep '"tag_name":' | cut -d'"' -f4)
@@ -52,10 +57,12 @@ jobs:
           XRAY_VERSION="v25.8.31"
         fi
         echo "Installing Xray $XRAY_VERSION"
-        wget -O /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-64.zip"
-        unzip -d /tmp /tmp/xray.zip
-        sudo cp /tmp/xray /usr/local/bin/
-        sudo chmod +x /usr/local/bin/xray
+        # Try known asset names to avoid 404 on naming changes
+        if ! curl -fL -o /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-64.zip"; then
+          curl -fL -o /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-amd64.zip"
+        fi
+        unzip -q -d /tmp /tmp/xray.zip
+        sudo install -m 755 /tmp/xray /usr/local/bin/xray
         xray version
     
     - name: Run tests

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yourusername/xrf-go/pkg/config"
+    "github.com/Joe-oss9527/xrf-go/pkg/config"
 )
 
 // 纯逻辑单元测试 - 不涉及真实系统调用

@@ -35,15 +35,21 @@ XRF-Go 是一个专为 Xray 设计的现代化配置管理工具，继承 233boy
 ### 一键安装
 
 ```bash
-curl -fsSL https://get.xrf.sh | bash
+curl -fsSL https://github.com/Joe-oss9527/xrf-go/releases/latest/download/install.sh | bash
 ```
 
 ### 手动安装
 
 ```bash
-# 下载最新版本
-wget https://github.com/yourusername/xrf-go/releases/latest/download/xrf-linux-amd64
-sudo install xrf-linux-amd64 /usr/local/bin/xrf
+# 下载并安装（AMD64 示例）
+wget https://github.com/Joe-oss9527/xrf-go/releases/latest/download/xrf-linux-amd64.tar.gz
+tar -xzf xrf-linux-amd64.tar.gz
+sudo install -m 755 xrf-linux-amd64 /usr/local/bin/xrf
+
+# ARM64 可使用：
+# wget https://github.com/Joe-oss9527/xrf-go/releases/latest/download/xrf-linux-arm64.tar.gz
+# tar -xzf xrf-linux-arm64.tar.gz
+# sudo install -m 755 xrf-linux-arm64 /usr/local/bin/xrf
 
 # 初始化配置
 xrf install
@@ -183,14 +189,14 @@ xrf add vr --port 8443 --sni www.microsoft.com
 
 ### 构建要求
 
-- Go 1.23+
+- Go 1.25+
 - Linux/macOS/Windows
 
 ### 编译
 
 ```bash
 # 克隆源码
-git clone https://github.com/yourusername/xrf-go.git
+git clone https://github.com/Joe-oss9527/xrf-go.git
 cd xrf-go
 
 # 编译
@@ -278,8 +284,8 @@ xrf-go/
 
 ## 📞 支持
 
-- 🐛 [报告问题](https://github.com/yourusername/xrf-go/issues)
-- 💬 [讨论区](https://github.com/yourusername/xrf-go/discussions)
+- 🐛 [报告问题](https://github.com/Joe-oss9527/xrf-go/issues)
+- 💬 [讨论区](https://github.com/Joe-oss9527/xrf-go/discussions)
 - 📖 [官方文档](https://xtls.github.io/)
 - 📧 [联系我们](mailto:support@example.com)
 
@@ -287,7 +293,7 @@ xrf-go/
 
 <div align="center">
 
-**[⭐ Star](https://github.com/yourusername/xrf-go)** • **[🔄 Fork](https://github.com/yourusername/xrf-go/fork)** • **[📢 反馈](https://github.com/yourusername/xrf-go/issues)**
+**[⭐ Star](https://github.com/Joe-oss9527/xrf-go)** • **[🔄 Fork](https://github.com/Joe-oss9527/xrf-go/fork)** • **[📢 反馈](https://github.com/Joe-oss9527/xrf-go/issues)**
 
 Made with ❤️ by XRF-Go Team
 

@@ -1,4 +1,4 @@
-module github.com/yourusername/xrf-go
+module github.com/Joe-oss9527/xrf-go
 
 go 1.25
 

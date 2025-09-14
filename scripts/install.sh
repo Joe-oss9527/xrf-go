@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # XRF-Go 一键安装脚本
-# Usage: curl -fsSL https://get.xrf.sh | bash
+# Usage: curl -fsSL https://github.com/Joe-oss9527/xrf-go/releases/latest/download/install.sh | bash
 
-set -e
+set -euo pipefail
 
 # 颜色定义
 RED='\033[0;31m'
@@ -87,7 +87,7 @@ detect_system() {
 check_dependencies() {
     info "检查系统依赖..."
     
-    local deps=("curl" "unzip" "systemctl")
+    local deps=("curl" "unzip" "tar" "systemctl")
     for dep in "${deps[@]}"; do
         if ! command -v $dep &> /dev/null; then
             error "缺少依赖: $dep，请先安装"
@@ -110,11 +110,28 @@ install_xray() {
         xray_version="v25.8.31"
     fi
     
-    local download_url="https://github.com/XTLS/Xray-core/releases/download/${xray_version}/Xray-linux-${ARCH}.zip"
+    local base_url="https://github.com/XTLS/Xray-core/releases/download/${xray_version}"
     local temp_dir=$(mktemp -d)
     
+    # 根据架构尝试多个可能的资产文件名以避免404
+    local candidates=()
+    if [[ "$ARCH" == "amd64" ]]; then
+        candidates+=("Xray-linux-64.zip" "Xray-linux-amd64.zip")
+    else
+        candidates+=("Xray-linux-arm64-v8a.zip" "Xray-linux-arm64.zip")
+    fi
+    
     info "下载 Xray ${xray_version} for ${ARCH}..."
-    if ! curl -fsSL -o "${temp_dir}/xray.zip" "$download_url"; then
+    local downloaded=""
+    for fname in "${candidates[@]}"; do
+        local url="${base_url}/${fname}"
+        if curl -fsSL -o "${temp_dir}/xray.zip" "$url"; then
+            downloaded="$fname"
+            break
+        fi
+    done
+    
+    if [[ -z "$downloaded" ]]; then
         error "下载 Xray 失败，请检查网络连接或稍后重试"
     fi
     
@@ -134,22 +151,44 @@ install_xray() {
 install_xrf_go() {
     info "正在安装 XRF-Go..."
     
-    # 这里应该从 GitHub Releases 下载预编译的二进制文件
-    # 目前使用本地编译的方式（演示）
-    local xrf_version="v1.0.0"
-    local download_url="https://github.com/yourusername/xrf-go/releases/download/${xrf_version}/xrf-linux-${ARCH}"
-    local temp_file=$(mktemp)
+    # 获取最新 Release 版本并从 GitHub Releases 下载预编译的二进制文件
+    local xrf_version=$(curl -fsSL "https://api.github.com/repos/Joe-oss9527/xrf-go/releases/latest" | grep '"tag_name":' | cut -d'"' -f4)
+    if [[ -z "$xrf_version" ]]; then
+        warning "无法获取 XRF-Go 最新版本，使用默认版本 v1.0.0"
+        xrf_version="v1.0.0"
+    fi
     
-    # 如果 release 不存在，则尝试从源码编译
-    if ! curl -fsSL -o "$temp_file" "$download_url" 2>/dev/null; then
+    local base_url="https://github.com/Joe-oss9527/xrf-go/releases/download/${xrf_version}"
+    local temp_dir=$(mktemp -d)
+    local downloaded=""
+    
+    # 优先下载 tar.gz 归档，其次尝试裸二进制
+    info "下载 XRF-Go ${xrf_version} for ${ARCH}..."
+    for fname in "xrf-linux-${ARCH}.tar.gz" "xrf-linux-${ARCH}"; do
+        local url="${base_url}/${fname}"
+        if curl -fsSL -o "${temp_dir}/${fname}" "$url" 2>/dev/null; then
+            downloaded="$fname"
+            break
+        fi
+    done
+    
+    if [[ -z "$downloaded" ]]; then
         warning "预编译版本不可用，将从源码编译..."
+        rm -rf "$temp_dir"
         compile_from_source
         return
     fi
     
-    $SUDO_CMD install -m 755 "$temp_file" /usr/local/bin/xrf
-    rm -f "$temp_file"
+    # 解压或直接安装
+    if [[ "$downloaded" == *.tar.gz ]]; then
+        tar -xzf "${temp_dir}/${downloaded}" -C "$temp_dir"
+        # 解包后文件名为 xrf-linux-${ARCH}
+        $SUDO_CMD install -m 755 "${temp_dir}/xrf-linux-${ARCH}" /usr/local/bin/xrf
+    else
+        $SUDO_CMD install -m 755 "${temp_dir}/${downloaded}" /usr/local/bin/xrf
+    fi
     
+    rm -rf "$temp_dir"
     success "XRF-Go 安装完成: $(xrf version | grep 'XRF-Go 版本')"
 }
 
@@ -169,7 +208,7 @@ compile_from_source() {
     cd "$temp_dir"
     
     info "克隆源码..."
-    git clone https://github.com/yourusername/xrf-go.git || error "克隆源码失败"
+    git clone https://github.com/Joe-oss9527/xrf-go.git || error "克隆源码失败"
     
     cd xrf-go
     info "编译中..."
@@ -249,9 +288,13 @@ optimize_system() {
         fi
     fi
     
-    # 优化文件描述符限制
-    echo '* soft nofile 1048576' | $SUDO_CMD tee -a /etc/security/limits.conf
-    echo '* hard nofile 1048576' | $SUDO_CMD tee -a /etc/security/limits.conf
+    # 优化文件描述符限制（避免重复）
+    if ! grep -qE '^\*\s+soft\s+nofile\s+1048576$' /etc/security/limits.conf 2>/dev/null; then
+        echo '* soft nofile 1048576' | $SUDO_CMD tee -a /etc/security/limits.conf >/dev/null
+    fi
+    if ! grep -qE '^\*\s+hard\s+nofile\s+1048576$' /etc/security/limits.conf 2>/dev/null; then
+        echo '* hard nofile 1048576' | $SUDO_CMD tee -a /etc/security/limits.conf >/dev/null
+    fi
     
     success "系统优化完成"
 }
@@ -292,7 +335,7 @@ show_completion() {
     echo "  • hu     - VLESS-HTTPUpgrade"
     echo
     echo -e "${YELLOW}文档和支持:${NC}"
-    echo "  • GitHub: https://github.com/yourusername/xrf-go"
+    echo "  • GitHub: https://github.com/Joe-oss9527/xrf-go"
     echo "  • 官方文档: https://xtls.github.io/"
     echo
 }
