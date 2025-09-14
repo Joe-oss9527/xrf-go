@@ -40,7 +40,8 @@ _trim() {
 # 校验是否为合理的 tag 值（而非 URL/空字符串）
 # 允许: 字母数字、点、短横线、下划线，且不包含斜杠或冒号
 _is_valid_tag() {
-    local tag="$(_trim "${1:-}")"
+    local tag
+    tag="$(_trim "${1:-}")"
     [[ -n "$tag" ]] || return 1
     [[ ! "$tag" =~ ^https?:// ]] || return 1
     [[ ! "$tag" =~ / ]] || return 1
@@ -130,16 +131,20 @@ select_asset_url() {
     local name_regex="$2"
 
     # 展平 JSON 并定位 assets 数组
-    local flat=$(echo "$release_json" | tr -d '\n')
-    local assets=$(echo "$flat" | sed -n 's/.*"assets":[[]\(.*\)[]].*/\1/p')
+    local flat
+    flat=$(echo "$release_json" | tr -d '\n')
+    local assets
+    assets=$(echo "$flat" | sed -n 's/.*"assets":[[]\(.*\)[]].*/\1/p')
     if [[ -z "$assets" ]]; then
         return 1
     fi
 
     # 按资产对象切分后逐一匹配名称并取其下载链接
     echo "$assets" | sed 's/},[[:space:]]*{/\n/g' | while IFS= read -r block; do
-        local name=$(echo "$block" | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
-        local url=$(echo "$block" | sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        local name
+        name=$(echo "$block" | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        local url
+        url=$(echo "$block" | sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
         if [[ -n "$name" && -n "$url" ]]; then
             if echo "$name" | grep -Eiq "$name_regex"; then
                 echo "$url"
@@ -151,7 +156,8 @@ select_asset_url() {
 
 # 获取系统架构（标准化）
 get_system_arch() {
-    local arch=$(uname -m)
+    local arch
+    arch=$(uname -m)
     case $arch in
         x86_64)
             echo "amd64"

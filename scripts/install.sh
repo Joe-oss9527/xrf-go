@@ -52,7 +52,8 @@ else
     }
 
     _is_valid_tag() {
-        local tag="$(_trim "${1:-}")"
+        local tag
+        tag="$(_trim "${1:-}")"
         [[ -n "$tag" ]] || return 1
         [[ ! "$tag" =~ ^https?:// ]] || return 1
         [[ ! "$tag" =~ / ]] || return 1
@@ -243,7 +244,8 @@ install_xray() {
         info "使用指定的 Xray 版本: ${xray_version}"
     fi
     
-    local temp_dir=$(mktemp -d)
+    local temp_dir
+    temp_dir=$(mktemp -d)
 
     # 通过 GitHub API 获取指定 tag 的 release（包含 assets）
     local curl_opts=( -fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: xrf-go-installer" )
@@ -251,7 +253,8 @@ install_xray() {
         curl_opts+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" )
     fi
     local release_api="https://api.github.com/repos/XTLS/Xray-core/releases/tags/${xray_version}"
-    local release_json=$(curl "${curl_opts[@]}" "$release_api" || true)
+    local release_json
+    release_json=$(curl "${curl_opts[@]}" "$release_api" || true)
     if [[ -z "$release_json" ]]; then
         error "获取 Xray Release 资产失败：${release_api}\n建议：\n  • 检查网络连通性或稍后重试\n  • 设置 GITHUB_TOKEN 以避免 GitHub API 限流\n  • 手动查看发布页确认资产是否存在：https://github.com/XTLS/Xray-core/releases/tag/${xray_version}\n  • 或显式指定版本：XRAY_VERSION=v26.x.y bash install.sh"
     fi
@@ -264,12 +267,14 @@ install_xray() {
         name_regex='^Xray-.*linux.*(arm64|arm64-v8a).*\.zip$'
     fi
 
-    local download_url=$(select_asset_url "$release_json" "$name_regex")
+    local download_url
+    download_url=$(select_asset_url "$release_json" "$name_regex")
     if [[ -z "$download_url" ]]; then
         error "未找到匹配架构(${ARCH})的 Xray 资产。\n已使用匹配规则: ${name_regex}\n发布页：https://github.com/XTLS/Xray-core/releases/tag/${xray_version}\n请在发布页确认是否存在相应资产，或设置 XRAY_VERSION 指定其他版本。"
     fi
 
-    local fname=$(basename "$download_url")
+    local fname
+    fname=$(basename "$download_url")
     info "下载 Xray ${xray_version} (${fname}) for ${ARCH}..."
     curl -fsSL -o "${temp_dir}/xray.zip" "$download_url" || error "下载 Xray 失败：${download_url}\n建议：\n  • 检查网络连通性/代理设置\n  • 稍后重试或手动从发布页下载：https://github.com/XTLS/Xray-core/releases/tag/${xray_version}"
     
@@ -290,7 +295,8 @@ install_xrf_go() {
     info "正在安装 XRF-Go..."
     
     # 获取最新版本
-    local xrf_version=$(get_github_latest_version "Joe-oss9527/xrf-go" "xrf-go-installer" || true)
+    local xrf_version
+    xrf_version=$(get_github_latest_version "Joe-oss9527/xrf-go" "xrf-go-installer" || true)
     if [[ -z "$xrf_version" ]]; then
         error "无法获取 XRF-Go 最新版本。\n建议：\n  • 检查网络连通性或稍后重试\n  • 设置 GITHUB_TOKEN 以避免 GitHub API 限流\n  • 手动查看发布页：https://github.com/Joe-oss9527/xrf-go/releases/latest"
     fi
@@ -303,23 +309,27 @@ install_xrf_go() {
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
         curl_opts+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" )
     fi
-    local xrf_json=$(curl "${curl_opts[@]}" "https://api.github.com/repos/Joe-oss9527/xrf-go/releases/latest" || true)
+    local xrf_json
+    xrf_json=$(curl "${curl_opts[@]}" "https://api.github.com/repos/Joe-oss9527/xrf-go/releases/latest" || true)
     if [[ -z "$xrf_json" ]]; then
         error "无法获取 XRF-Go Release 信息用于资产下载。\n手动查看发布页：https://github.com/Joe-oss9527/xrf-go/releases/latest"
     fi
 
-    local temp_dir=$(mktemp -d)
+    local temp_dir
+    temp_dir=$(mktemp -d)
     info "下载 XRF-Go ${xrf_version} for ${ARCH}..."
 
     # 解析资产并选择与架构匹配的 tar.gz
     local name_regex="^xrf-.*linux-${ARCH}.*\.(tar\.gz|tgz)$"
-    local xrf_url=$(select_asset_url "$xrf_json" "$name_regex")
+    local xrf_url
+    xrf_url=$(select_asset_url "$xrf_json" "$name_regex")
     if [[ -z "$xrf_url" ]]; then
         rm -rf "$temp_dir"
         error "未找到与架构(${ARCH})匹配的 XRF-Go 预编译归档。\n匹配规则: ${name_regex}\n发布页：https://github.com/Joe-oss9527/xrf-go/releases/tag/${xrf_version}\n请在发布页确认是否存在相应产物。"
     fi
 
-    local downloaded=$(basename "$xrf_url")
+    local downloaded
+    downloaded=$(basename "$xrf_url")
     curl -fsSL -o "${temp_dir}/${downloaded}" "$xrf_url" || {
         rm -rf "$temp_dir"
         error "下载 XRF-Go 预编译归档失败：${xrf_url}\n建议：\n  • 检查网络连通性/代理设置\n  • 稍后重试或手动从发布页下载：https://github.com/Joe-oss9527/xrf-go/releases/tag/${xrf_version}"
@@ -341,7 +351,7 @@ setup_config() {
     info "设置配置目录..."
     
     $SUDO_CMD mkdir -p /etc/xray/confs
-    $SUDO_CMD chown $(whoami):$(whoami) /etc/xray/confs
+    $SUDO_CMD chown "$(whoami)":"$(whoami)" /etc/xray/confs
     
     success "配置目录创建完成: /etc/xray/confs"
 }

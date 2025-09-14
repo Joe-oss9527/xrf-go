@@ -122,9 +122,9 @@ build_single() {
         -o "$output_path" \
         cmd/xrf/main.go
     
-    # 计算文件大小
+    # 计算文件大小（避免使用 ls 以通过 ShellCheck 建议）
     local size
-    size=$(ls -lh "$output_path" | awk '{print $5}')
+    size="$(wc -c <"$output_path" | awk '{print $1}')B"
     success "构建完成: ${output_name} (${size})"
     
     # 生成校验和
@@ -173,8 +173,10 @@ EOF
 
 # 构建当前平台
 build_current() {
-    local goos=$(go env GOOS)
-    local goarch=$(go env GOARCH)
+    local goos
+    goos=$(go env GOOS)
+    local goarch
+    goarch=$(go env GOARCH)
     local platform="${goos}/${goarch}"
     
     info "构建当前平台: $platform"
@@ -217,8 +219,8 @@ create_release() {
             cp README.md "$temp_dir/" 2>/dev/null || true
             cp LICENSE "$temp_dir/" 2>/dev/null || true
             
-            # 创建压缩包
-            (cd "$temp_dir" && tar -czf "$archive_name" *)
+            # 创建压缩包（使用 -- 以避免以 - 开头的文件名被解释为选项）
+            (cd "$temp_dir" && tar -czf "$archive_name" -- *)
             mv "$temp_dir/$archive_name" "$release_dir/"
             
             rm -rf "$temp_dir"
