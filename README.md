@@ -67,14 +67,42 @@ xrf --help
 # 添加 VLESS-REALITY（推荐）
 xrf add vr --port 443
 
+# 注意: REALITY 的 --dest 传入“域名”即可（不要附带 :443），模板会自动补上 :443
+# 示例（正确）:
+xrf add vr --port 443 --dest www.microsoft.com
+# 示例（错误，容易导致目标变成 www.microsoft.com:443:443）:
+# xrf add vr --port 443 --dest www.microsoft.com:443
+
 # 添加 VLESS-Encryption（后量子加密）
 xrf add ve --port 443 --auth mlkem768
+# 说明：
+# - 命令会调用 xray 生成服务端 settings.decryption，并计算出客户端 settings.encryption（0rtt 优先）
+# - 终端会打印 "客户端 encryption"，将该值粘贴到客户端 VLESS outbound 的 settings.encryption
 
 # 添加 VMess-WebSocket-TLS
 xrf add vmess --port 443 --domain example.com
 
 # 添加 Shadowsocks
 xrf add ss --port 8388 --password your-password
+```
+
+### 3.1 分享链接与导入
+- `xrf url <tag>` 会自动生成分享链接：
+  - 自动选择主机：优先域名/Host，其次公网 IP（HTTP 检测），再次出网口 IP（仅公网）；仅在全部失败时才会出现 `localhost`
+  - VLESS 一律带 `encryption=none`
+  - REALITY 链接包含 `security=reality`、`flow=xtls-rprx-vision`、`pbk`、`sni`、`fp`、`sid`、`type=tcp`、`headerType=none`
+  - WS/TLS 链接包含 `sni=host`，并在存在时附带 `alpn`
+  - 备注统一使用 URL 片段：`#Remark`（不再使用 `remarks=` 查询参数）
+- 指定主机覆盖：`xrf url <tag> --host your-domain.com`
+- 显示二维码：`xrf qr <tag> --host your-domain.com`
+
+示例：
+```bash
+# REALITY 分享链接（示例）
+xrf url vless_reality --host your-ip-or-domain
+
+# VLESS-WS/TLS 分享链接（示例）
+xrf url vless_ws --host example.com
 ```
 
 ### 4. 查看配置
@@ -246,6 +274,21 @@ XRF-Go 使用 `/etc/xray/confs/` 目录存储配置：
 ├── 20-outbound-*.json  # 出站配置
 └── 90-routing.json     # 路由规则
 ```
+
+## ✅ 最佳实践与注意事项
+- VLESS-REALITY
+  - `--dest` 传入域名即可（不要携带端口），模板会自动补 `:443`
+  - 建议 `flow=xtls-rprx-vision`（已默认），客户端链接自带 `encryption=none`
+- VLESS-Encryption
+  - `xrf add ve` 会生成服务端 `settings.decryption`，并打印客户端 `settings.encryption`（复制到客户端 outbound）
+  - 不可与 `settings.fallbacks` 同时使用
+- WebSocket/TLS
+  - 建议在配置中设置 `wsSettings.host` 与 `tlsSettings.alpn`（如 `h2,http/1.1`），分享链接会携带 `host`、`sni` 与可选 `alpn`
+- 分享备注
+  - 全部统一为 URL 片段 `#Remark`，兼容主流客户端导入
+- 主机自动选择
+  - 优先使用域名/Host；无域名时自动探测公网 IP，必要时回退到出网口 IP（仅公网）；避免出现不可用的 `localhost`
+
 
 ## 🔐 权限要求
 
