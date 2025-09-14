@@ -24,6 +24,14 @@ XRF-Go 是一个高效、简洁的 Xray 安装配置工具，专为简化 Xray �
 curl -fsSL https://github.com/Joe-oss9527/xrf-go/releases/latest/download/install.sh | bash
 ```
 
+固定安装到指定版本（可选）：
+
+```bash
+curl -fsSL https://github.com/Joe-oss9527/xrf-go/releases/latest/download/install.sh | XRF_VERSION=v1.0.1 bash
+```
+
+提示：安装脚本会在安装前校验二进制架构并在不匹配时中止，以避免 “Exec format error”。
+
 ### 方式 2：手动下载
 
 #### Linux AMD64 (x86_64)

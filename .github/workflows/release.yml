@@ -106,6 +106,12 @@ jobs:
         sha256sum *.tar.gz > checksums.txt
         cat checksums.txt
         cd ..
+
+    - name: Validate archives
+      run: |
+        chmod +x scripts/validate-archive.sh
+        ./scripts/validate-archive.sh dist/xrf-linux-amd64.tar.gz amd64
+        ./scripts/validate-archive.sh dist/xrf-linux-arm64.tar.gz arm64
     
     - name: Create Release Notes
       id: release_notes

@@ -228,6 +228,10 @@ check_dependencies() {
     info "检查系统依赖..."
     
     local deps=("curl" "unzip" "tar" "systemctl")
+    # 可选：用于验证二进制架构
+    if ! command -v file >/dev/null 2>&1; then
+        warning "未找到 'file' 命令，无法在安装前验证二进制架构（可忽略）"
+    fi
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &> /dev/null; then
             error "缺少依赖: $dep，请先安装"
@@ -412,11 +416,30 @@ install_xrf_go() {
 
     local temp_dir
     temp_dir=$(mktemp -d)
-    info "尝试直接下载 XRF-Go 预编译包 (latest) ..."
-    local xrf_urls=(
-        "https://github.com/Joe-oss9527/xrf-go/releases/latest/download/xrf-linux-${ARCH}.tar.gz"
-        "https://github.com/Joe-oss9527/xrf-go/releases/latest/download/xrf-linux-${ARCH}.tgz"
-    )
+    
+    # 允许通过环境变量固定版本（例如：XRF_VERSION=v1.0.1），否则使用 latest
+    local desired_version="${XRF_VERSION:-latest}"
+    if [[ -n "${desired_version}" && "${desired_version}" != "latest" ]]; then
+        if ! is_valid_tag "${desired_version}"; then
+            rm -rf "$temp_dir"; error "XRF_VERSION 不合法：${desired_version}"
+        fi
+        info "尝试直接下载 XRF-Go 预编译包 (${desired_version}) ..."
+    else
+        info "尝试直接下载 XRF-Go 预编译包 (latest) ..."
+    fi
+    
+    local xrf_urls=()
+    if [[ "${desired_version}" == "latest" ]]; then
+        xrf_urls=(
+            "https://github.com/Joe-oss9527/xrf-go/releases/latest/download/xrf-linux-${ARCH}.tar.gz"
+            "https://github.com/Joe-oss9527/xrf-go/releases/latest/download/xrf-linux-${ARCH}.tgz"
+        )
+    else
+        xrf_urls=(
+            "https://github.com/Joe-oss9527/xrf-go/releases/download/${desired_version}/xrf-linux-${ARCH}.tar.gz"
+            "https://github.com/Joe-oss9527/xrf-go/releases/download/${desired_version}/xrf-linux-${ARCH}.tgz"
+        )
+    fi
     local got=""
     for u in "${xrf_urls[@]}"; do
         if curl_download_to "$u" "${temp_dir}/xrf.tar.gz" 2>/dev/null; then
@@ -424,9 +447,13 @@ install_xrf_go() {
         fi
     done
     if [[ -z "$got" ]]; then
-        info "直接下载失败，回退至 GitHub API 查询最新版本..."
+        info "直接下载失败，回退至 GitHub API 查询版本信息..."
         local xrf_version
-        xrf_version=$(get_github_latest_version "Joe-oss9527/xrf-go" "xrf-go-installer" || true)
+        if [[ "${desired_version}" == "latest" ]]; then
+            xrf_version=$(get_github_latest_version "Joe-oss9527/xrf-go" "xrf-go-installer" || true)
+        else
+            xrf_version="${desired_version}"
+        fi
         if ! is_valid_tag "${xrf_version:-}"; then
             rm -rf "$temp_dir"; error "获取到的 XRF-Go 版本号不合法：${xrf_version:-<empty>}"
         fi
@@ -439,7 +466,7 @@ install_xrf_go() {
         local xrf_url
         xrf_url=$(select_asset_url "$xrf_json" "$name_regex")
         if [[ -z "$xrf_url" ]]; then
-            rm -rf "$temp_dir"; error "未找到与架构(${ARCH})匹配的 XRF-Go 预编译归档"
+            rm -rf "$temp_dir"; error "未找到与架构(${ARCH})匹配的 XRF-Go 预编译归档（版本：${xrf_version}）"
         fi
         curl_download_to "$xrf_url" "${temp_dir}/xrf.tar.gz" || { rm -rf "$temp_dir"; error "下载 XRF-Go 失败：${xrf_url}"; }
     else
@@ -449,13 +476,43 @@ install_xrf_go() {
     # 解压并安装 XRF-Go
     tar -xzf "${temp_dir}/xrf.tar.gz" -C "$temp_dir" || { rm -rf "$temp_dir"; error "解压 XRF-Go 包失败"; }
     local bin_path
-    bin_path=$(find "$temp_dir" -maxdepth 1 -type f -name 'xrf*' -print -quit)
+    # 优先精确匹配平台文件名，其次匹配通用二进制名，显式排除压缩包
+    bin_path=$(find "$temp_dir" -maxdepth 1 -type f \
+        \( -name "xrf-linux-${ARCH}" -o -name "xrf" -o -name "xrf_*" -o -name "xrf-*" \) \
+        ! -name "*.tar.gz" ! -name "*.tgz" ! -name "*.gz" \
+        -print -quit)
     if [[ -z "$bin_path" ]]; then
         rm -rf "$temp_dir"; error "XRF-Go 包中未找到可执行文件"
     fi
+    
+    # 安装前验证二进制是否与期望架构匹配（如果有 'file' 命令）
+    if command -v file >/dev/null 2>&1; then
+        local fdesc
+        fdesc=$(file -b "$bin_path" || true)
+        if [[ "$ARCH" == "amd64" ]]; then
+            if ! echo "$fdesc" | grep -Eiq 'x86-64|x86_*64|AMD64'; then
+                rm -rf "$temp_dir"; error "检测到下载的二进制与系统架构不匹配（期望: amd64, 实际: ${fdesc}）。请尝试手动下载正确的包或设置 XRF_VERSION 固定版本。"
+            fi
+        elif [[ "$ARCH" == "arm64" ]]; then
+            if ! echo "$fdesc" | grep -Eiq 'aarch64|ARM aarch64|ARM64'; then
+                rm -rf "$temp_dir"; error "检测到下载的二进制与系统架构不匹配（期望: arm64, 实际: ${fdesc}）。请尝试手动下载正确的包或设置 XRF_VERSION 固定版本。"
+            fi
+        fi
+    fi
     $SUDO_CMD install -m 755 "$bin_path" /usr/local/bin/xrf
     rm -rf "$temp_dir"
-    success "XRF-Go 安装完成: $(xrf version | grep 'XRF-Go 版本' || echo '已安装')"
+    # 尝试运行一次以确保可执行
+    if /usr/local/bin/xrf version >/dev/null 2>&1; then
+        success "XRF-Go 安装完成: $(/usr/local/bin/xrf version | grep 'XRF-Go 版本' || echo '已安装')"
+    else
+        if command -v file >/dev/null 2>&1; then
+            local ffinal
+            ffinal=$(file -b /usr/local/bin/xrf || true)
+            error "XRF-Go 已安装到 /usr/local/bin/xrf，但无法执行（可能为架构不匹配）。文件信息: ${ffinal}"
+        else
+            error "XRF-Go 已安装到 /usr/local/bin/xrf，但无法执行。建议安装 'file' 工具后重试，或手动下载对应架构的预编译包。"
+        fi
+    fi
 }
 
 ## 编译回退逻辑已移除：若预编译资产不可用或下载失败，将直接报错退出
@@ -608,5 +665,7 @@ main() {
     show_completion
 }
 
-# 运行主函数
-main "$@"
+# 运行主函数（支持通过环境变量跳过，以便在自动化/测试中 source 本脚本）
+if [[ "${XRF_INSTALLER_SKIP_MAIN:-}" != "1" ]]; then
+    main "$@"
+fi
