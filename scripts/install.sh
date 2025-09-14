@@ -11,7 +11,7 @@ COMMON_SH="${SCRIPT_DIR}/common.sh"
 
 # 如果存在本地 common.sh，则加载它（开发环境）
 if [[ -f "$COMMON_SH" ]]; then
-    # shellcheck source=./common.sh
+    # shellcheck source=scripts/common.sh
     source "$COMMON_SH"
     # 统一本脚本的日志接口
     info() { log_info "$1"; }
