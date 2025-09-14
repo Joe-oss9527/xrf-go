@@ -55,9 +55,12 @@ check_environment() {
         error "Go 环境未安装，请先安装 Go 1.21+"
     fi
     
-    local go_version=$(go version | grep -o 'go[0-9.]*' | sed 's/go//')
-    local major=$(echo $go_version | cut -d. -f1)
-    local minor=$(echo $go_version | cut -d. -f2)
+    local go_version
+    go_version=$(go version | grep -o 'go[0-9.]*' | sed 's/go//')
+    local major
+    major=$(echo "$go_version" | cut -d. -f1)
+    local minor
+    minor=$(echo "$go_version" | cut -d. -f2)
     
     if [[ $major -lt 1 ]] || [[ $major -eq 1 && $minor -lt 21 ]]; then
         error "需要 Go 1.21+，当前版本: $go_version"
@@ -96,9 +99,11 @@ run_tests() {
 
 # 构建单个平台
 build_single() {
-    local platform=$1
-    local goos=$(echo $platform | cut -d'/' -f1)
-    local goarch=$(echo $platform | cut -d'/' -f2)
+    local platform="$1"
+    local goos
+    goos=$(echo "$platform" | cut -d'/' -f1)
+    local goarch
+    goarch=$(echo "$platform" | cut -d'/' -f2)
     
     # 架构处理 (仅支持 amd64 和 arm64)
     
@@ -112,13 +117,14 @@ build_single() {
     info "构建 ${goos}/${goarch}..."
     
     # 设置环境变量并构建
-    env GOOS=$goos GOARCH=$goarch GOARM=$goarm \
+    env GOOS="$goos" GOARCH="$goarch" \
         go build -trimpath -ldflags="$BUILD_FLAGS" \
         -o "$output_path" \
         cmd/xrf/main.go
     
     # 计算文件大小
-    local size=$(ls -lh "$output_path" | awk '{print $5}')
+    local size
+    size=$(ls -lh "$output_path" | awk '{print $5}')
     success "构建完成: ${output_name} (${size})"
     
     # 生成校验和
@@ -199,11 +205,14 @@ create_release() {
     # 为每个二进制文件创建压缩包
     for binary in dist/xrf-*; do
         if [[ -f "$binary" && ! "$binary" =~ \.(txt|md)$ ]]; then
-            local basename=$(basename "$binary")
-            local archive_name="${basename}.tar.gz"
+            local basename
+            basename=$(basename "$binary")
+            local archive_name
+            archive_name="${basename}.tar.gz"
             
             # 复制到临时目录
-            local temp_dir=$(mktemp -d)
+            local temp_dir
+            temp_dir=$(mktemp -d)
             cp "$binary" "$temp_dir/xrf"
             cp README.md "$temp_dir/" 2>/dev/null || true
             cp LICENSE "$temp_dir/" 2>/dev/null || true
