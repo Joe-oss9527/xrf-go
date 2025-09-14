@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewACMEManager(t *testing.T) {
-	email := "test@example.com"
+	email := "test@xrf-go.invalid"
 	manager := NewACMEManager(email)
 
 	if manager.email != email {
@@ -21,7 +21,7 @@ func TestNewACMEManager(t *testing.T) {
 }
 
 func TestSetStagingMode(t *testing.T) {
-	manager := NewACMEManager("test@example.com")
+	manager := NewACMEManager("test@xrf-go.invalid")
 	manager.SetStagingMode()
 
 	if manager.caURL != LEStagingURL {
@@ -30,7 +30,7 @@ func TestSetStagingMode(t *testing.T) {
 }
 
 func TestSetCertDir(t *testing.T) {
-	manager := NewACMEManager("test@example.com")
+	manager := NewACMEManager("test@xrf-go.invalid")
 	customDir := "/tmp/test-certs"
 	manager.SetCertDir(customDir)
 
@@ -40,7 +40,7 @@ func TestSetCertDir(t *testing.T) {
 }
 
 func TestSetACMEDir(t *testing.T) {
-	manager := NewACMEManager("test@example.com")
+	manager := NewACMEManager("test@xrf-go.invalid")
 	customDir := "/tmp/test-acme"
 	manager.SetACMEDir(customDir)
 
@@ -55,7 +55,7 @@ func TestInitialize(t *testing.T) {
 	certDir := filepath.Join(tmpDir, "certs")
 	acmeDir := filepath.Join(tmpDir, "acme")
 
-    manager := NewACMEManager("test@example.com")
+    manager := NewACMEManager("test@xrf-go.invalid")
     manager.SetStagingMode() // 使用测试环境
     manager.SetOfflineMode() // 测试环境下禁用网络请求与注册
 	manager.SetCertDir(certDir)
@@ -80,7 +80,7 @@ func TestInitialize(t *testing.T) {
 
 func TestSaveCertificate(t *testing.T) {
 	tmpDir := t.TempDir()
-	manager := NewACMEManager("test@example.com")
+    manager := NewACMEManager("test@xrf-go.invalid")
 	manager.SetCertDir(tmpDir)
 
 	domain := "test.example.com"
@@ -117,7 +117,7 @@ func TestSaveCertificate(t *testing.T) {
 
 func TestCheckCertificateExpiry(t *testing.T) {
 	tmpDir := t.TempDir()
-	manager := NewACMEManager("test@example.com")
+    manager := NewACMEManager("test@xrf-go.invalid")
 	manager.SetCertDir(tmpDir)
 
 	// 创建一个简单的测试证书文件
@@ -141,7 +141,7 @@ test certificate content for testing
 }
 
 func TestACMEUser(t *testing.T) {
-	email := "test@example.com"
+	email := "test@xrf-go.invalid"
 	user := &ACMEUser{
 		Email: email,
 	}
