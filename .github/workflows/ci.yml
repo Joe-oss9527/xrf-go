@@ -17,6 +17,8 @@ jobs:
   test:
     name: Test and Build
     runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: 1
     
     steps:
     - name: Checkout code
@@ -42,7 +44,6 @@ jobs:
     
     - name: Run tests
       run: |
-        export CGO_ENABLED=1
         go test -v -race -short -coverprofile=coverage.txt -covermode=atomic ./...
     
     - name: Upload coverage reports
@@ -65,6 +66,8 @@ jobs:
   lint:
     name: Lint Code
     runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: 1
     
     steps:
     - name: Checkout code
@@ -85,6 +88,8 @@ jobs:
   vet:
     name: Go Vet
     runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: 1
     
     steps:
     - name: Checkout code
@@ -119,6 +124,8 @@ jobs:
   shellcheck:
     name: Shell Scripts Lint
     runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: 1
     steps:
     - name: Checkout code
       uses: actions/checkout@v5
