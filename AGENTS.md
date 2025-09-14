@@ -41,3 +41,16 @@
 ## Security & Configuration Tips
 - No secrets in code or logs; use GitHub Encrypted Secrets
 - Shell scripts: `set -euo pipefail`; prefer `sudo install` over `cp && chmod`
+
+## Pre-Commit & Pre-Push Checklist
+- Format: `gofmt -s -w .`
+- Vet: `go vet ./...`
+- Lint: `golangci-lint run`
+- Test: `go test -v -race ./...` (locally run full tests; CI may use `-short`)
+- Modules: `go mod tidy` and ensure `git status` is clean
+
+## Using GitHub CLI (gh)
+- Prefer `gh` for repository and CI interactions; keep `git` for local changes
+- CI: `gh run list`, `gh run view <id> --log`, `gh run watch <id>`
+- Releases: manage via tags + workflows; `gh release view <tag>`, `gh release create <tag> ...`
+- Before any tag/release operation, run the Pre-Commit & Pre-Push Checklist (or `make verify`/`scripts/dev-verify.sh`)

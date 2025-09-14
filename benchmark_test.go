@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-    "github.com/Joe-oss9527/xrf-go/pkg/config"
+	"github.com/Joe-oss9527/xrf-go/pkg/config"
 )
 
 // BenchmarkAddProtocol 测试添加协议的性能

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-    "github.com/Joe-oss9527/xrf-go/pkg/config"
+	"github.com/Joe-oss9527/xrf-go/pkg/config"
 )
 
 func TestServiceManagerBasics(t *testing.T) {

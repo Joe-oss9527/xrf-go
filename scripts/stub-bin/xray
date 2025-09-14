@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -e
+
+case "$1" in
+  run)
+    # Support: xray run -test -confdir <dir>
+    if [[ "$2" == "-test" ]] || [[ "$3" == "-test" ]]; then
+      echo "Xray run -test OK (stub)"
+      exit 0
+    fi
+    ;;
+  version|-version)
+    echo "Xray-core v25.8.31 (stub)"
+    exit 0
+    ;;
+esac
+
+echo "xray stub invoked: $*"
+exit 0
+
