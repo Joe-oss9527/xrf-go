@@ -410,12 +410,29 @@ func createUninstallCommand() *cobra.Command {
 				}
 			}
 
+			// 5) 完全卸载时，尝试移除 XRF 自身（常见安装路径）
+			if full {
+				paths := []string{"/usr/local/bin/xrf", "/usr/bin/xrf"}
+				exePath, _ := os.Executable()
+				for _, p := range paths {
+					if _, err := os.Stat(p); err == nil {
+						if remErr := os.Remove(p); remErr == nil {
+							if exePath == p {
+								utils.PrintInfo("已移除 XRF 可执行文件（当前进程仍可继续）: %s", p)
+							} else {
+								utils.PrintInfo("已移除 XRF 可执行文件: %s", p)
+							}
+						} else {
+							utils.PrintWarning("移除 XRF 可执行文件失败 (%s): %v", p, remErr)
+						}
+					}
+				}
+			}
+
 			utils.PrintSuccess("Xray 卸载完成")
 			if removeConfigs {
 				utils.PrintInfo("已将原配置备份到 /tmp（文件名前缀 xrf-uninstall-backup-）")
 			}
-			// 卸载 XRF 自身需手动执行（本进程无法安全自删）
-			utils.PrintInfo("如需卸载本工具: sudo rm -f /usr/local/bin/xrf")
 			return nil
 		},
 	}
