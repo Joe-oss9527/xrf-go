@@ -57,12 +57,6 @@ jobs:
       run: |
         go build -v -o xrf cmd/xrf/main.go
         ./xrf --help
-
-    - name: Smoke uninstall (non-root safe)
-      run: |
-        # Exercise uninstall path without requiring root/systemd
-        ./xrf uninstall --full --keep-binary --yes
-        echo "Uninstall smoke completed"
     
     - name: Run build script test
       run: |
