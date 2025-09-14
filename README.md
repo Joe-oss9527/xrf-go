@@ -184,6 +184,29 @@ xrf ip
 xrf info system
 ```
 
+### 卸载与清理
+```bash
+# 卸载 Xray（保留配置与日志）
+xrf uninstall
+
+# 完全卸载（移除服务/用户、二进制、配置、日志），非交互
+xrf uninstall --full --yes
+
+# 自定义：仅移除服务用户与用户组
+xrf uninstall --purge-user --yes
+
+# 自定义：备份并删除 /etc/xray 配置（备份文件位于 /tmp，前缀 xrf-uninstall-backup-）
+xrf uninstall --remove-configs --yes
+
+# 自定义：删除日志（/var/log/xray*）
+xrf uninstall --remove-logs --yes
+```
+
+说明：
+- 默认操作会提示确认；在脚本/CI 环境可使用 `--yes` 跳过交互。
+- 完全卸载会将 `/etc/xray` 目录打包备份到 `/tmp/xrf-uninstall-backup-YYYYMMDD-HHMMSS.tar.gz` 后再删除。
+- 卸载 XRF 自身（本工具）需手动操作：`sudo rm -f /usr/local/bin/xrf`。
+
 ## 🏗️ 架构设计
 
 XRF-Go 采用模块化架构设计：
