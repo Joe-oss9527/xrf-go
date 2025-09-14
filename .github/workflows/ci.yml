@@ -38,7 +38,7 @@ jobs:
         set -euo pipefail
         # Download and install Xray for configuration validation in tests
         # Get latest version dynamically
-        XRAY_VERSION=$(curl -fsSL "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | grep '"tag_name":' | cut -d'"' -f4)
+        XRAY_VERSION=$(curl -fsSL "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | jq -r .tag_name || true)
         if [ -z "$XRAY_VERSION" ]; then
           echo "Failed to get latest version, using fallback"
           XRAY_VERSION="v25.8.31"
