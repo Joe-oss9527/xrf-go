@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-    "github.com/Joe-oss9527/xrf-go/pkg/api"
+	"github.com/Joe-oss9527/xrf-go/pkg/api"
 )
 
 // TestSystemIntegration 测试跨模块集成功能
