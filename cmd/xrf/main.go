@@ -82,6 +82,7 @@ func main() {
 	rootCmd.AddCommand(
 		createInstallCommand(),
 		createAddCommand(),
+		createUninstallCommand(),
 		createListCommand(),
 		createRemoveCommand(),
 		createInfoCommand(),
@@ -327,6 +328,103 @@ func createInstallCommand() *cobra.Command {
 	cmd.Flags().IntVar(&port, "port", 0, "端口")
 	cmd.Flags().BoolVar(&enableBBR, "enable-bbr", true, "启用 BBR 拥塞控制")
 	cmd.Flags().BoolVar(&autoFW, "auto-firewall", true, "自动配置防火墙")
+
+	return cmd
+}
+
+// createUninstallCommand 提供卸载（含完全卸载）能力
+func createUninstallCommand() *cobra.Command {
+	var (
+		full          bool
+		purgeUser     bool
+		removeConfigs bool
+		removeLogs    bool
+		assumeYes     bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "uninstall",
+		Short: "卸载 Xray（支持完全卸载）",
+		Long: `卸载 Xray 服务与二进制，并可选择清理配置、日志及服务用户。
+
+示例:
+  xrf uninstall --full           # 完全卸载（移除服务/用户、二进制、配置、日志）
+  xrf uninstall --remove-configs # 卸载并清理 /etc/xray 配置目录
+  xrf uninstall --purge-user     # 同时删除 xray 服务用户与用户组
+  xrf uninstall --yes            # 非交互确认
+`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			utils.PrintSection("卸载 Xray")
+
+			if full {
+				purgeUser = true
+				removeConfigs = true
+				removeLogs = true
+			}
+
+			if !assumeYes {
+				utils.PrintWarning("该操作将卸载 Xray 服务与二进制，且可能删除配置/日志/用户！")
+				utils.PrintInfo("使用 --yes 跳过确认")
+				fmt.Print("确认继续卸载? 输入 'yes' 确认: ")
+				var confirm string
+				_, _ = fmt.Scanln(&confirm)
+				if strings.ToLower(strings.TrimSpace(confirm)) != "yes" {
+					return fmt.Errorf("已取消卸载")
+				}
+			}
+
+			// 1) 卸载 systemd 服务
+			if err := serviceMgr.UninstallServiceWithOptions(purgeUser); err != nil {
+				utils.PrintWarning("卸载服务出错: %v", err)
+			}
+
+			// 2) 卸载 Xray 二进制
+			if err := installer.Uninstall(); err != nil {
+				utils.PrintWarning("卸载二进制出错: %v", err)
+			}
+
+			// 3) 可选：备份并删除配置目录
+			if removeConfigs {
+				backup := fmt.Sprintf("/tmp/xrf-uninstall-backup-%s.tar.gz", time.Now().Format("20060102-150405"))
+				utils.PrintInfo("备份配置到: %s", backup)
+				// 使用系统 tar
+				tarCmd := exec.Command("tar", "-czf", backup, "-C", "/etc", "xray")
+				if err := tarCmd.Run(); err != nil {
+					utils.PrintWarning("备份失败: %v", err)
+				}
+				// 删除 /etc/xray
+				if err := os.RemoveAll("/etc/xray"); err != nil {
+					utils.PrintWarning("删除配置目录失败: %v", err)
+				} else {
+					utils.PrintSuccess("已删除配置目录: /etc/xray")
+				}
+			}
+
+			// 4) 可选：删除日志
+			if removeLogs {
+				paths := []string{"/var/log/xray", "/var/log/xray.log"}
+				for _, p := range paths {
+					if err := os.RemoveAll(p); err == nil {
+						utils.PrintInfo("已删除: %s", p)
+					}
+				}
+			}
+
+			utils.PrintSuccess("Xray 卸载完成")
+			if removeConfigs {
+				utils.PrintInfo("已将原配置备份到 /tmp（文件名前缀 xrf-uninstall-backup-）")
+			}
+			// 卸载 XRF 自身需手动执行（本进程无法安全自删）
+			utils.PrintInfo("如需卸载本工具: sudo rm -f /usr/local/bin/xrf")
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&full, "full", false, "完全卸载（移除服务用户、配置与日志）")
+	cmd.Flags().BoolVar(&purgeUser, "purge-user", false, "删除 xray 服务用户与用户组")
+	cmd.Flags().BoolVar(&removeConfigs, "remove-configs", false, "删除 /etc/xray 配置目录（会先尝试备份）")
+	cmd.Flags().BoolVar(&removeLogs, "remove-logs", false, "删除日志（/var/log/xray*）")
+	cmd.Flags().BoolVar(&assumeYes, "yes", false, "跳过交互确认，直接卸载")
 
 	return cmd
 }
