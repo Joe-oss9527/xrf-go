@@ -442,9 +442,10 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 		return "", err
 	}
 
-	// 合并配置信息
-	urlConfig := make(map[string]interface{})
-	urlConfig["host"] = "localhost" // 默认主机，用户可以修改
+    // 合并配置信息
+    urlConfig := make(map[string]interface{})
+    // 默认主机，后续会尝试从配置或公网IP自动判定
+    urlConfig["host"] = "localhost"
 	urlConfig["port"] = info.Port
 	urlConfig["remark"] = tag
 
@@ -463,14 +464,17 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 						// 提取客户端信息
 						if clients, exists := settingsMap["clients"]; exists {
 							if clientList, ok := clients.([]interface{}); ok && len(clientList) > 0 {
-								if client, ok := clientList[0].(map[string]interface{}); ok {
-									if uuid, exists := client["id"]; exists {
-										urlConfig["uuid"] = uuid
-									}
-									if password, exists := client["password"]; exists {
-										urlConfig["password"] = password
-									}
-								}
+                                    if client, ok := clientList[0].(map[string]interface{}); ok {
+                                        if uuid, exists := client["id"]; exists {
+                                            urlConfig["uuid"] = uuid
+                                        }
+                                        if password, exists := client["password"]; exists {
+                                            urlConfig["password"] = password
+                                        }
+                                        if flow, exists := client["flow"]; exists {
+                                            urlConfig["flow"] = flow
+                                        }
+                                    }
 							}
 						}
 
@@ -491,14 +495,21 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 							urlConfig["network"] = network
 						}
 
-						// WebSocket 设置
-						if wsSettings, exists := streamMap["wsSettings"]; exists {
-							if wsMap, ok := wsSettings.(map[string]interface{}); ok {
-								if path, exists := wsMap["path"]; exists {
-									urlConfig["path"] = path
-								}
-							}
-						}
+                    // WebSocket 设置
+                    if wsSettings, exists := streamMap["wsSettings"]; exists {
+                        if wsMap, ok := wsSettings.(map[string]interface{}); ok {
+                            if path, exists := wsMap["path"]; exists {
+                                urlConfig["path"] = path
+                            }
+                            // 提取 Host 头（多数情况下与域名相同，可作为连接主机）
+                            if h, exists := wsMap["host"]; exists {
+                                urlConfig["wsHostHeader"] = h
+                                if hs, ok := h.(string); ok && hs != "" {
+                                    urlConfig["host"] = hs
+                                }
+                            }
+                        }
+                    }
 
 						// HTTPUpgrade 设置
 						if huSettings, exists := streamMap["httpupgradeSettings"]; exists {
@@ -534,17 +545,60 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 							}
 						}
 
-						// TLS 设置
-						if security, exists := streamMap["security"]; exists {
-							urlConfig["security"] = security
-						}
+                    // TLS 设置
+                    if security, exists := streamMap["security"]; exists {
+                        urlConfig["security"] = security
+                    }
+                    // 提取 TLS 配置中的 ALPN（若存在）
+                    if tlsSettings, exists := streamMap["tlsSettings"]; exists {
+                        if tlsMap, ok := tlsSettings.(map[string]interface{}); ok {
+                            if alpn, exists := tlsMap["alpn"]; exists {
+                                switch v := alpn.(type) {
+                                case []interface{}:
+                                    parts := make([]string, 0, len(v))
+                                    for _, it := range v {
+                                        if s, ok := it.(string); ok && s != "" {
+                                            parts = append(parts, s)
+                                        }
+                                    }
+                                    if len(parts) > 0 {
+                                        urlConfig["alpn"] = strings.Join(parts, ",")
+                                    }
+                                case []string:
+                                    if len(v) > 0 {
+                                        urlConfig["alpn"] = strings.Join(v, ",")
+                                    }
+                                case string:
+                                    if v != "" {
+                                        urlConfig["alpn"] = v
+                                    }
+                                }
+                            }
+                        }
+                    }
 					}
 				}
 			}
 		}
 	}
 
-	return utils.GenerateProtocolURL(info.Type, tag, urlConfig)
+    // 若仍为 localhost，尝试探测公网 IP 作为主机
+    if h, ok := urlConfig["host"].(string); !ok || h == "" || h == "localhost" {
+        if ip, err := utils.GetPublicIP(); err == nil {
+            ipStr := strings.TrimSpace(ip)
+            if utils.IsPublicIP(ipStr) {
+                urlConfig["host"] = ipStr
+            }
+        }
+        // fallback: derive outbound IP without external HTTP (use only if public)
+        if h2, _ := urlConfig["host"].(string); h2 == "" || h2 == "localhost" {
+            if ip2, err := utils.GetOutboundIP(); err == nil && utils.IsPublicIP(ip2) {
+                urlConfig["host"] = ip2
+            }
+        }
+    }
+
+    return utils.GenerateProtocolURL(info.Type, tag, urlConfig)
 }
 
 // BackupConfig 备份配置

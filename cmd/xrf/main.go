@@ -198,13 +198,13 @@ func showSystemdJournalFollow() error {
 }
 
 func createInstallCommand() *cobra.Command {
-	var (
-		protocols []string
-		domain    string
-		port      int
-		enableBBR bool
-		autoFW    bool
-	)
+    var (
+        protocols []string
+        domain    string
+        port      int
+        enableBBR bool
+        autoFW    bool
+    )
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -215,8 +215,8 @@ func createInstallCommand() *cobra.Command {
   xrf install                                    # 默认安装 VLESS-REALITY (零配置)
   xrf install --protocol vless-reality           # 指定协议
   xrf install --protocols vw,tw --domain example.com  # 多协议安装(TLS协议需要域名)`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			utils.PrintSection("XRF-Go 安装程序")
+        RunE: func(cmd *cobra.Command, args []string) error {
+            utils.PrintSection("XRF-Go 安装程序")
 
 			// 检查系统支持
 			if supported, reason := detector.IsSupported(); !supported {
@@ -240,16 +240,29 @@ func createInstallCommand() *cobra.Command {
 				return fmt.Errorf("服务安装失败: %w", err)
 			}
 
-			// 初始化配置管理器
-			utils.PrintInfo("初始化配置...")
-			if err := configMgr.Initialize(); err != nil {
-				return fmt.Errorf("配置初始化失败: %w", err)
-			}
+            // 初始化配置管理器
+            utils.PrintInfo("初始化配置...")
+            if err := configMgr.Initialize(); err != nil {
+                return fmt.Errorf("配置初始化失败: %w", err)
+            }
 
-			// 添加指定的协议
-			if len(protocols) == 0 {
-				protocols = []string{"vless-reality"}
-			}
+            // 检测并回显公网地址/域名，便于后续分享链接使用
+            if domain != "" {
+                utils.PrintKeyValue("使用域名", domain)
+            } else {
+                if ip, err := utils.GetPublicIP(); err == nil && utils.IsPublicIP(strings.TrimSpace(ip)) {
+                    utils.PrintKeyValue("检测到公网IP", strings.TrimSpace(ip))
+                } else if ip2, err2 := utils.GetOutboundIP(); err2 == nil && utils.IsPublicIP(ip2) {
+                    utils.PrintKeyValue("出网IP", ip2)
+                } else {
+                    utils.PrintWarning("未能检测到公网IP，请稍后使用 --host 指定实际地址")
+                }
+            }
+
+            // 添加指定的协议
+            if len(protocols) == 0 {
+                protocols = []string{"vless-reality"}
+            }
 
 			for i, protocolType := range protocols {
 				utils.PrintInfo("添加协议 %d/%d: %s", i+1, len(protocols), protocolType)
@@ -1150,20 +1163,20 @@ func createURLCommand() *cobra.Command {
 				return fmt.Errorf("生成分享链接失败: %w", err)
 			}
 
-			// 如果用户指定了自定义主机，替换 URL 中的主机
-			if customHost != "" {
-				shareURL = strings.Replace(shareURL, "localhost", customHost, 1)
-			}
+            // 如果用户指定了自定义主机，替换 URL 中的主机
+            if customHost != "" {
+                shareURL = strings.Replace(shareURL, "localhost", customHost, 1)
+            }
 
 			utils.PrintSubSection("分享链接")
 			fmt.Printf("  %s\n", shareURL)
 
-			// 显示提示信息
-			if customHost == "" {
-				utils.PrintWarning("注意: 链接使用 'localhost' 作为主机地址")
-				utils.PrintInfo("使用 --host 参数指定实际的服务器地址")
-				utils.PrintInfo("例如: xrf url %s --host your-server.com", tag)
-			}
+            // 仅当链接仍包含 localhost 时给出提示
+            if customHost == "" && strings.Contains(shareURL, "@localhost:") {
+                utils.PrintWarning("注意: 链接使用 'localhost' 作为主机地址")
+                utils.PrintInfo("使用 --host 参数指定实际的服务器地址")
+                utils.PrintInfo("例如: xrf url %s --host your-server.com", tag)
+            }
 
 			return nil
 		},
@@ -1206,12 +1219,12 @@ func createQRCommand() *cobra.Command {
 			// 显示二维码
 			utils.PrintQRCode(shareURL, tag)
 
-			// 显示提示信息
-			if customHost == "" {
-				utils.PrintWarning("\n注意: 链接使用 'localhost' 作为主机地址")
-				utils.PrintInfo("使用 --host 参数指定实际的服务器地址")
-				utils.PrintInfo("例如: xrf qr %s --host your-server.com", tag)
-			}
+            // 仅当链接仍包含 localhost 时给出提示
+            if customHost == "" && strings.Contains(shareURL, "@localhost:") {
+                utils.PrintWarning("\n注意: 链接使用 'localhost' 作为主机地址")
+                utils.PrintInfo("使用 --host 参数指定实际的服务器地址")
+                utils.PrintInfo("例如: xrf qr %s --host your-server.com", tag)
+            }
 
 			// 如果没有安装 qrencode，显示安装说明
 			if !utils.IsQREncodeAvailable() {
