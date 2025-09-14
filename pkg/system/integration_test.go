@@ -205,6 +205,10 @@ func TestRealSystemEnvironmentSimulation(t *testing.T) {
 		serviceManager := NewServiceManager(detector)
 
 		isRoot := detector.IsRoot()
+		if isRoot {
+			// 该子测试旨在验证非 root 情况下的权限错误路径；在 root 下执行会产生真实安装/服务变更，带来副作用且耗时。
+			t.Skip("skipping permission-sensitive operations as root to avoid side effects")
+		}
 
 		// 验证权限敏感操作的行为
 		rootRequiredOps := []struct {

@@ -55,14 +55,14 @@ func TestInitialize(t *testing.T) {
 	certDir := filepath.Join(tmpDir, "certs")
 	acmeDir := filepath.Join(tmpDir, "acme")
 
-    manager := NewACMEManager("test@xrf-go.invalid")
-    manager.SetStagingMode() // 使用测试环境
-    manager.SetOfflineMode() // 测试环境下禁用网络请求与注册
+	manager := NewACMEManager("test@xrf-go.invalid")
+	manager.SetStagingMode() // 使用测试环境
+	manager.SetOfflineMode() // 测试环境下禁用网络请求与注册
 	manager.SetCertDir(certDir)
 	manager.SetACMEDir(acmeDir)
 
-    // 初始化（离线模式下不会访问网络）
-    err := manager.Initialize()
+	// 初始化（离线模式下不会访问网络）
+	err := manager.Initialize()
 
 	// 至少验证目录创建成功
 	if _, err := os.Stat(certDir); os.IsNotExist(err) {
@@ -73,14 +73,14 @@ func TestInitialize(t *testing.T) {
 		t.Errorf("ACME directory was not created: %s", acmeDir)
 	}
 
-    if err != nil {
-        t.Fatalf("ACME manager initialize failed in offline mode: %v", err)
-    }
+	if err != nil {
+		t.Fatalf("ACME manager initialize failed in offline mode: %v", err)
+	}
 }
 
 func TestSaveCertificate(t *testing.T) {
 	tmpDir := t.TempDir()
-    manager := NewACMEManager("test@xrf-go.invalid")
+	manager := NewACMEManager("test@xrf-go.invalid")
 	manager.SetCertDir(tmpDir)
 
 	domain := "test.example.com"
@@ -117,7 +117,7 @@ func TestSaveCertificate(t *testing.T) {
 
 func TestCheckCertificateExpiry(t *testing.T) {
 	tmpDir := t.TempDir()
-    manager := NewACMEManager("test@xrf-go.invalid")
+	manager := NewACMEManager("test@xrf-go.invalid")
 	manager.SetCertDir(tmpDir)
 
 	// 创建一个简单的测试证书文件

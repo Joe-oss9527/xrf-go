@@ -37,14 +37,14 @@ func TestAddProtocol_FullIntegration(t *testing.T) {
 			t.Fatalf("AddProtocol failed: %v", err)
 		}
 
-        // 完整流程在本地通常 <300ms；在 GitHub Actions 等 CI 环境中证书生成与 I/O 更慢
-        // 实测在 CI 上约 600ms，故将阈值上调以反映真实环境性能而非逻辑错误
-        const threshold = 800 * time.Millisecond
-        if duration > threshold {
-            t.Errorf("Full integration took %v, exceeds %v target", duration, threshold)
-        } else {
-            t.Logf("✅ Full integration completed in %v (under %v target)", duration, threshold)
-        }
+		// 完整流程在本地通常 <300ms；在 GitHub Actions 等 CI 环境中证书生成与 I/O 更慢
+		// 实测在 CI 上约 600ms，故将阈值上调以反映真实环境性能而非逻辑错误
+		const threshold = 800 * time.Millisecond
+		if duration > threshold {
+			t.Errorf("Full integration took %v, exceeds %v target", duration, threshold)
+		} else {
+			t.Logf("✅ Full integration completed in %v (under %v target)", duration, threshold)
+		}
 
 		// 验证配置是否包含证书
 		info, err := configMgr.GetProtocolInfo("vless-integration")
