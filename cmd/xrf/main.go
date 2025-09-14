@@ -2105,36 +2105,6 @@ func getLatestXrayVersion() (string, error) {
     return r.TagName, nil
 }
 
-// generateVLESSENCPair 调用 `xray vlessenc` 生成服务端 decryption 与客户端 encryption 字符串
-func generateVLESSENCPair() (string, string, error) {
-    out, err := runXraySimple("vlessenc")
-    if err != nil {
-        return "", "", err
-    }
-    // 首选 ML-KEM-768 段（后量子）。若未能定位，则取最后一组键值
-    // 提取所有 decryption/encryption 值
-    decRe := regexp.MustCompile(`"decryption"\s*:\s*"([^"]+)"`)
-    encRe := regexp.MustCompile(`"encryption"\s*:\s*"([^"]+)"`)
-    decs := decRe.FindAllStringSubmatch(out, -1)
-    encs := encRe.FindAllStringSubmatch(out, -1)
-    if len(decs) == 0 || len(encs) == 0 {
-        return "", "", fmt.Errorf("未能从 xray vlessenc 输出中解析到 decryption/encryption")
-    }
-    // 优先查找“Authentication: ML-KEM-768”后的键值对
-    pqIdx := strings.Index(out, "Authentication: ML-KEM-768")
-    if pqIdx >= 0 {
-        // 在该位置之后，匹配第一对 decryption/encryption
-        tail := out[pqIdx:]
-        pd := decRe.FindStringSubmatch(tail)
-        pe := encRe.FindStringSubmatch(tail)
-        if len(pd) == 2 && len(pe) == 2 {
-            return pd[1], pe[1], nil
-        }
-    }
-    // 否则返回最后一组（通常是 PQ 组）
-    return decs[len(decs)-1][1], encs[len(encs)-1][1], nil
-}
-
 func runXraySimple(args ...string) (string, error) {
     xrayPath, err := exec.LookPath("xray")
     if err != nil {
