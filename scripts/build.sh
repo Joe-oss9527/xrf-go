@@ -3,7 +3,7 @@
 # XRF-Go 构建脚本
 # 支持多平台交叉编译
 
-set -e
+set -euo pipefail
 
 # 颜色定义
 RED='\033[0;31m'
