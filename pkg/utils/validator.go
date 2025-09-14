@@ -95,7 +95,16 @@ func SuggestPort(protocolType string, preferredPort int) (int, error) {
 			return 80, nil
 		}
 		startPort, endPort = 40000, 50000
-	case "vmess", "vless-ws", "trojan-ws", "mw", "vw", "tw", "VMess-WebSocket-TLS", "VLESS-WebSocket-TLS", "Trojan-WebSocket-TLS":
+    case "vless-encryption", "ve", "VLESS-Encryption":
+        // 与 REALITY 类似，优先 443/80
+        if IsPortAvailable(443) {
+            return 443, nil
+        }
+        if IsPortAvailable(80) {
+            return 80, nil
+        }
+        startPort, endPort = 40000, 50000
+    case "vmess", "vless-ws", "trojan-ws", "mw", "vw", "tw", "VMess-WebSocket-TLS", "VLESS-WebSocket-TLS", "Trojan-WebSocket-TLS":
 		// WebSocket 类推荐使用 80, 443 或高端口
 		if IsPortAvailable(80) {
 			return 80, nil
@@ -333,12 +342,3 @@ func IsValidUUID(uuid string) bool {
 	uuidRegex := regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[4][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 	return uuidRegex.MatchString(uuid)
 }
-    case "vless-encryption", "ve", "VLESS-Encryption":
-        // 与 REALITY 类似，默认尝试 443/80
-        if IsPortAvailable(443) {
-            return 443, nil
-        }
-        if IsPortAvailable(80) {
-            return 80, nil
-        }
-        startPort, endPort = 40000, 50000
