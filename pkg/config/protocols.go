@@ -182,10 +182,10 @@ func (pm *ProtocolManager) GetProtocolByTemplate(template string) (Protocol, err
 
 // GetDefaultSettings 获取协议的默认设置
 func (pm *ProtocolManager) GetDefaultSettings(protocolName string) map[string]interface{} {
-    protocol, err := pm.GetProtocol(protocolName)
-    if err != nil {
-        return nil
-    }
+	protocol, err := pm.GetProtocol(protocolName)
+	if err != nil {
+		return nil
+	}
 
 	settings := map[string]interface{}{
 		"port":                protocol.DefaultPort,
@@ -195,21 +195,21 @@ func (pm *ProtocolManager) GetDefaultSettings(protocolName string) map[string]in
 	}
 
 	// 根据协议类型添加特定设置
-    switch strings.ToLower(protocol.Name) {
-    case "vless-reality":
-        settings["transport"] = "tcp"
-        settings["security"] = "reality"
-        settings["dest"] = "www.microsoft.com"
-        settings["serverName"] = "www.microsoft.com"
+	switch strings.ToLower(protocol.Name) {
+	case "vless-reality":
+		settings["transport"] = "tcp"
+		settings["security"] = "reality"
+		settings["dest"] = "www.microsoft.com"
+		settings["serverName"] = "www.microsoft.com"
 
-    case "vless-encryption":
-        settings["transport"] = "tcp"
-        settings["flow"] = "xtls-rprx-vision"
+	case "vless-encryption":
+		settings["transport"] = "tcp"
+		settings["flow"] = "xtls-rprx-vision"
 
-    case "vless-websocket-tls", "vmess-websocket-tls", "trojan-websocket-tls":
-        settings["transport"] = "ws"
-        settings["path"] = "/ws"
-        if protocol.RequiresTLS {
+	case "vless-websocket-tls", "vmess-websocket-tls", "trojan-websocket-tls":
+		settings["transport"] = "ws"
+		settings["path"] = "/ws"
+		if protocol.RequiresTLS {
 			settings["security"] = "tls"
 		}
 
