@@ -67,10 +67,7 @@ const VLESSRealityInboundTemplate = `{
           "serverNames": ["{{.ServerName}}"],
           "privateKey": "{{.PrivateKey}}",
           "shortIds": ["{{.ShortId}}"],
-          "minClientVer": "",
-          "maxClientVer": "",
-          "maxTimeDiff": 0,
-          "spiderX": "/"
+          "fingerprint": "chrome"
         },
         "sockopt": {
           "tcpKeepAliveIdle": 300,

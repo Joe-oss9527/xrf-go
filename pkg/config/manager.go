@@ -485,6 +485,13 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 						if password, exists := settingsMap["password"]; exists {
 							urlConfig["password"] = password
 						}
+						// 提取VLESS-Encryption相关字段
+						if decryption, exists := settingsMap["decryption"]; exists {
+							urlConfig["decryption"] = decryption
+						}
+						if encryption, exists := settingsMap["encryption"]; exists {
+							urlConfig["encryption"] = encryption
+						}
 					}
 				}
 
@@ -610,7 +617,22 @@ func (cm *ConfigManager) GenerateShareURL(tag string) (string, error) {
 		}
 	}
 
-	return utils.GenerateProtocolURL(info.Type, tag, urlConfig)
+	// 根据配置内容调整协议类型以区分不同变体
+	protocolType := info.Type
+	if info.Type == "vless" {
+		// 检查是否是 VLESS-Encryption
+		if decryption, exists := urlConfig["decryption"]; exists {
+			if decStr, ok := decryption.(string); ok && strings.Contains(decStr, "mlkem768x25519plus") {
+				protocolType = "vless-encryption"
+			}
+		}
+		// 检查是否是 VLESS-REALITY
+		if security, exists := urlConfig["security"]; exists && security == "reality" {
+			protocolType = "vless-reality"
+		}
+	}
+
+	return utils.GenerateProtocolURL(protocolType, tag, urlConfig)
 }
 
 // BackupConfig 备份配置
@@ -923,7 +945,7 @@ func (cm *ConfigManager) generateTemplateData(protocol Protocol, tag string, opt
 			}
 		}
 		if data.Dest == "" {
-			data.Dest = "www.microsoft.com"
+			data.Dest = "www.bing.com"
 		}
 
 		if serverName, exists := options["serverName"]; exists {

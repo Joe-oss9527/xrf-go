@@ -168,13 +168,27 @@ func GenerateProtocolURL(protocolType, tag string, config map[string]interface{}
 				params["encryption"] = encValue
 			} else {
 				// 如果没有明确的 encryption，尝试从 decryption 推导
-				if decValue := getStringValue(config, "decryption", ""); decValue != "" && decValue != "none" {
-					// 尝试从服务端 decryption 推导客户端 encryption
-					if derivedEnc, err := deriveEncryptionFromDecryption(decValue); err == nil {
-						params["encryption"] = derivedEnc
+				// 先尝试从顶层读取，然后从 settings 中读取
+				decValue := getStringValue(config, "decryption", "")
+				if decValue == "" {
+					// 尝试从 settings.decryption 读取
+					if settings, exists := config["settings"].(map[string]interface{}); exists {
+						decValue = getStringValue(settings, "decryption", "")
+					}
+				}
+
+				if decValue != "" && decValue != "none" {
+					// 对于VLESS-Encryption，直接使用服务端的decryption作为客户端的encryption
+					// 这是因为在VLESS-Encryption中，服务端的decryption参数实际上包含了客户端需要的encryption信息
+					// 根据官方文档，客户端和服务端共享相同的参数结构
+					if strings.Contains(decValue, "mlkem768x25519plus") {
+						// 将服务端的decryption转换为客户端的encryption格式
+						// 替换RTT设置为客户端推荐的0rtt
+						clientEnc := strings.Replace(decValue, ".600s.", ".0rtt.", 1)
+						params["encryption"] = clientEnc
 					} else {
-						// 回退到标准 VLESS
-						params["encryption"] = "none"
+						// 其他格式的加密，直接使用
+						params["encryption"] = decValue
 					}
 				} else {
 					params["encryption"] = "none"
@@ -337,67 +351,6 @@ func getIntValue(config map[string]interface{}, key string, defaultValue int) in
 		}
 	}
 	return defaultValue
-}
-
-// deriveEncryptionFromDecryption 从服务端 decryption 推导客户端 encryption
-func deriveEncryptionFromDecryption(decryption string) (string, error) {
-	parts := strings.Split(decryption, ".")
-	if len(parts) < 4 {
-		return "", fmt.Errorf("invalid decryption format")
-	}
-	prefix, mode := parts[0], parts[1]
-	// rest contains RTT settings and key materials
-	rest := parts[3:]
-	if len(rest) == 0 {
-		return "", fmt.Errorf("decryption missing key segment")
-	}
-
-	// Identify the key (usually the last base64-looking segment)
-	key := rest[len(rest)-1]
-
-	// Try to determine key type by length after base64 decode
-	var keyBytes []byte
-	if kb, err := base64.RawURLEncoding.DecodeString(key); err == nil {
-		keyBytes = kb
-	} else {
-		return "", fmt.Errorf("failed to parse key: %v", err)
-	}
-
-	var clientKey string
-	switch len(keyBytes) {
-	case 32: // X25519 private -> derive public
-		pub, err := DeriveX25519Public(key)
-		if err != nil {
-			return "", err
-		}
-		clientKey = pub
-	case 64: // ML-KEM-768 seed -> derive client key (would need xray command)
-		// For URL generation, we'll use a placeholder since we can't call xray here
-		// In practice, this should be pre-computed and stored in config
-		clientKey = key // Use seed as placeholder - should be replaced with actual client key
-	default:
-		return "", fmt.Errorf("unsupported key length: %d", len(keyBytes))
-	}
-
-	// Build client encryption with 0rtt preference
-	clientRTT := "0rtt"
-	enc := buildVEEncryption(prefix, mode, clientRTT, "", clientKey)
-	return enc, nil
-}
-
-// buildVEEncryption builds VLESS-Encryption parameter string
-func buildVEEncryption(prefix, mode, rtt, padding, key string) string {
-	parts := []string{prefix, mode, strings.ToLower(strings.TrimSpace(rtt))}
-	if strings.TrimSpace(padding) != "" {
-		for _, seg := range strings.Split(padding, ".") {
-			seg = strings.TrimSpace(seg)
-			if seg != "" {
-				parts = append(parts, seg)
-			}
-		}
-	}
-	parts = append(parts, key)
-	return strings.Join(parts, ".")
 }
 
 // getHeadersFromConfig extracts HTTP headers from config
